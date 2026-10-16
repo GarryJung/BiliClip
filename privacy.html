@@ -72,30 +72,31 @@
 <body>
 <div class="container">
   <h1>BiliClip喵贴 隐私政策</h1>
-  <div class="update">最后更新日期：2026年9月6日</div>
+  <div class="update">最后更新日期：2026年10月16日</div>
 
-  <p>BiliClip喵贴（以下简称"本扩展"）是一款浏览器扩展工具，旨在帮助用户快速复制 B 站视频的 BV 码和标题。我们高度重视您的隐私，本政策说明本扩展如何处理信息。</p>
+  <p>BiliClip喵贴（以下简称"本扩展"）帮助您复制 B 站视频的 BV 码和标题。本页补充按 Firefox 7.2.2 公开安装包核对的权限说明；其他浏览器版本请同时查看对应商店及安装时的权限提示。</p>
 
   <h2>一、本扩展收集什么信息</h2>
   <p><strong>本扩展不收集、不上传、不共享任何个人身份信息。</strong></p>
   <p>本扩展在运行过程中仅在您的浏览器本地临时处理以下数据：</p>
   <ul>
-    <li><strong>BV 码和视频标题</strong>：当您点击复制按钮时，当前视频的 BV 码和标题会临时保存在浏览器本地存储（chrome.storage.local）中，用于后续的自动粘贴功能。该数据<strong>仅存储在您的本地浏览器</strong>，不会发送到任何服务器。</li>
+    <li><strong>BV 码和视频标题</strong>：当您点击复制按钮时，当前视频的 BV 码和标题会临时保存在浏览器本地存储（chrome.storage.local）中，用于后续的自动粘贴功能。待粘贴任务保存在本地浏览器。标题缺失时，扩展会将 BV 码作为查询参数发送至 B 站官方接口，以获取标题。</li>
     <li><strong>剪贴板内容</strong>：本扩展需要写入剪贴板权限（clipboardWrite），仅用于将 BV 码或标题复制到您的剪贴板。本扩展<strong>不会读取</strong>您剪贴板中已有的内容。</li>
   </ul>
 
   <h2>二、本扩展请求的权限说明</h2>
   <ul>
-    <li><strong>storage</strong>：在浏览器本地临时存储 BV 码和标题，关闭浏览器或完成粘贴后可自动清除。</li>
+    <li><strong>storage</strong>：在浏览器本地保存待粘贴的 BV 码和标题，用于跨页面共享任务。该存储不是仅随窗口存在的会话存储，请勿假定关闭浏览器就会自动清除。</li>
     <li><strong>clipboardWrite</strong>：将 BV 码和标题写入您的剪贴板。</li>
-    <li><strong>host_permissions（bilibili.com / api.bilibili.com）</strong>：仅在 B 站页面注入功能脚本，并通过 B 站官方 API 获取视频标题。<strong>不会访问其他网站的数据</strong>。</li>
+    <li><strong>host_permissions（bilibili.com / api.bilibili.com）</strong>：访问 B 站页面和官方接口，用于复制、填充和补全标题。</li>
+    <li><strong>全网页内容脚本匹配</strong>：Firefox 7.2.2 的 content_scripts.matches 包含 http://*/* 和 https://*/*，并在所有框架运行。因此安装提示可能包含所有网站访问权限，权限范围并不限于 B 站。内容脚本监听新的复制行为，以取消旧的 BV/标题任务；智能粘贴逻辑限制在 B 站页面。</li>
   </ul>
 
   <h2>三、数据存储与清除</h2>
-  <p>所有临时数据均存储在您本地浏览器的 storage.local 中，您可以随时通过以下方式清除：</p>
+  <p>待粘贴任务保存在浏览器本地的 storage.local 中，您可以通过以下方式清除：</p>
   <ul>
     <li>在浏览器扩展管理页面移除本扩展，所有本地数据将被一并删除。</li>
-    <li>在浏览器设置中清除站点数据和扩展存储。</li>
+    <li>如果浏览器提供扩展存储管理功能，可通过该功能清除；清除普通网站数据不一定会清除扩展存储。</li>
   </ul>
 
   <h2>四、第三方服务</h2>
@@ -105,14 +106,15 @@
   <p>本扩展不面向未成年人，也不会主动收集未成年人的任何信息。</p>
 
   <div class="highlight">
-    总结：本扩展不收集任何个人数据，所有操作均在您的浏览器本地完成，不上传、不共享、不追踪。
+    概要：待粘贴任务保存在本地；标题补全会请求 B 站官方接口。Firefox 7.2.2 包含全网页内容脚本匹配，请按实际安装提示了解权限范围。
   </div>
 
   <div class="contact">
     如有疑问，请通过以下方式联系：<br>
     邮箱：i@lcat.cc<br>
-    官网：https://bv.lcat.cc/
+    <a href="/">返回官网</a> · <a href="https://github.com/GaryRong2022/BiliClip/issues" target="_blank" rel="noopener noreferrer">问题反馈</a>
   </div>
 </div>
 </body>
 </html>
+
