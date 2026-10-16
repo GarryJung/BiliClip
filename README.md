@@ -134,7 +134,7 @@ python3 -m http.server 8000
 
 > 用心创作，终会万众瞩目！
 
-[X / Twitter：小丁猫同学](https://x.com/TavvCat) · [GitHub：GaryRong2022](https://github.com/GaryRong2022) · [Email：i@lcat.cc](mailto:i@lcat.cc)
+[X / Twitter：小丁猫同学](https://x.com/TavvCat) · [GitHub：GaryRong2022](https://github.com/GaryRong2022) · [Email：i@lcat.cc](mailto:i@lcat.cc) · [Reddit：u/garryjung](https://www.reddit.com/user/garryjung/)
 
 还做了一个小工具：**[ScrollFerry](https://github.com/GaryRong2022/ScrollFerry)**，帮忙处理小鹅通题库上传。欢迎顺路逛逛。
 
