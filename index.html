@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BiliClip 喵贴 — B站一键填充BV码和标题</title>
 <link rel="icon" href="favicon.png">
-<meta name="description" content="复制B站视频BV码和标题，在创作中心按一次粘贴自动填入两个输入框。免费开源的油猴脚本。">
+<meta name="description" content="复制B站视频BV码和标题，在创作中心按一次粘贴自动填入两个输入框。支持 Edge、Firefox、360 商店安装，也可使用油猴脚本。">
 <link rel="stylesheet" href="https://miaoda.feishu.cn/fonts/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap">
 <style>
 /* ===== 变量 ===== */
@@ -223,6 +223,18 @@ body::after {
 .feat p { font-size: 13.5px; color: var(--text-2); line-height: 1.7; }
 
 /* ===== 安装 ===== */
+.store-shortcuts { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 28px; }
+.store-shortcuts a { padding: 7px 12px; border: 1px solid var(--border-2); border-radius: var(--radius-sm); font-size: 13px; color: var(--text-2); }
+.store-shortcuts a:hover { color: var(--pink); border-color: var(--pink); }
+.store-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-bottom: 18px; }
+.store-card { display: flex; flex-direction: column; align-items: flex-start; padding: 24px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); }
+.store-card h3 { font-size: 18px; margin-bottom: 8px; }
+.store-card p { font-size: 13.5px; color: var(--text-2); margin-bottom: 20px; }
+.store-card .btn-s { margin-top: auto; }
+.store-note { font-size: 13.5px; color: var(--text-2); margin-bottom: 32px; }
+.store-note a { color: var(--pink); text-decoration: underline; }
+.store-shortcuts a:focus-visible, .store-card a:focus-visible { outline: 2px solid var(--pink); outline-offset: 4px; }
+@media (max-width: 600px) { .store-grid { grid-template-columns: 1fr; } }
 .install-grid { display: grid; grid-template-columns: 1fr 1.1fr; gap: 28px; }
 .steps-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 30px; }
 .steps-card h3 { font-size: 18px; font-weight: 700; margin-bottom: 24px; }
@@ -428,7 +440,7 @@ body::after {
       <a href="#faq">常见问题</a>
       <a href="#install" class="nav-install">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        安装脚本
+        立即安装
       </a>
     </div>
     <button class="nav-toggle" id="navToggle" aria-label="菜单">
@@ -455,6 +467,11 @@ body::after {
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
             技术说明
           </a>
+        </div>
+        <div class="store-shortcuts" aria-label="扩展商店快捷入口">
+          <a href="https://microsoftedge.microsoft.com/addons/detail/kiifbllklilololdabaifmhnaaaokjlc" target="_blank" rel="noopener noreferrer">Edge 商店 ↗</a>
+          <a href="https://addons.mozilla.org/zh-CN/firefox/addon/biliclip%E5%96%B5%E8%B4%B4-b%E7%AB%99%E4%B8%80%E9%94%AE%E5%A4%8D%E5%88%B6bv%E7%A0%81%E6%A0%87%E9%A2%98/" target="_blank" rel="noopener noreferrer">Firefox 商店 ↗</a>
+          <a href="https://ext.se.360.cn/#/extension-detail?id=dgigoaikkdcenigcnaeimgnfinocefkd" target="_blank" rel="noopener noreferrer">360 商店 ↗</a>
         </div>
         <div class="hero-tags">
           <div class="hero-tag">
@@ -566,10 +583,28 @@ body::after {
   <div class="section-inner">
     <div class="eyebrow">INSTALL</div>
     <h2 class="h2">安装 BiliClip 喵贴</h2>
-    <p class="lead">从安装脚本管理器到开始使用，只需不到一分钟。</p>
+    <p class="lead">已上架 Edge、Firefox 和 360 扩展商店，选择对应浏览器即可安装。也可继续使用下方的油猴脚本。</p>
+    <div class="store-grid" aria-label="从扩展商店安装">
+      <div class="store-card">
+        <h3>Microsoft Edge</h3>
+        <p>使用 Edge 打开商店页面，点击“获取”，按提示添加扩展。</p>
+        <a class="btn-s" href="https://microsoftedge.microsoft.com/addons/detail/kiifbllklilololdabaifmhnaaaokjlc" target="_blank" rel="noopener noreferrer">前往 Edge 商店 ↗</a>
+      </div>
+      <div class="store-card">
+        <h3>Firefox</h3>
+        <p>使用 Firefox 打开附加组件页面，点击“添加到 Firefox”。</p>
+        <a class="btn-s" href="https://addons.mozilla.org/zh-CN/firefox/addon/biliclip%E5%96%B5%E8%B4%B4-b%E7%AB%99%E4%B8%80%E9%94%AE%E5%A4%8D%E5%88%B6bv%E7%A0%81%E6%A0%87%E9%A2%98/" target="_blank" rel="noopener noreferrer">前往 Firefox 商店 ↗</a>
+      </div>
+      <div class="store-card">
+        <h3>360 浏览器</h3>
+        <p>使用 360 浏览器打开扩展商店，按页面提示完成安装。</p>
+        <a class="btn-s" href="https://ext.se.360.cn/#/extension-detail?id=dgigoaikkdcenigcnaeimgnfinocefkd" target="_blank" rel="noopener noreferrer">前往 360 商店 ↗</a>
+      </div>
+    </div>
+    <p class="store-note">商店安装完成后，请刷新 B 站页面。扩展版与脚本版选择一种安装即可，避免重复运行。Chrome 和 QQ 浏览器暂无商店快捷入口，可按下方教程安装脚本。</p>
     <div class="install-grid">
       <div class="steps-card">
-        <h3>安装步骤</h3>
+        <h3>油猴脚本安装（可选方式）</h3>
         <div class="step-item">
           <div class="step-num">1</div>
           <div><h4>安装脚本管理器</h4><p>在浏览器扩展商店安装 <a href="https://www.tampermonkey.net/" target="_blank" title="前往Tampermonkey官网" style="color:#0000EE;text-decoration:underline;">Tampermonkey</a>
@@ -3493,7 +3528,7 @@ body::after {
       <p>免费开源，一分钟安装，立刻提升 B 站创作效率。</p>
       <a href="#install" class="btn-p" style="display:inline-flex;">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        立即安装脚本
+        选择安装方式
       </a>
     </div>
   </div>
