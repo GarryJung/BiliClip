@@ -6,7 +6,7 @@
   <p>
     <a href="https://bv.lcat.cc/">逛逛官网</a> ·
     <a href="https://bv.lcat.cc/#install">现在安装</a> ·
-    <a href="https://github.com/GarryRong/BiliClip/issues">有话想说</a>
+    <a href="https://github.com/GarryJung/BiliClip/issues">有话想说</a>
   </p>
 </div>
 
@@ -99,7 +99,7 @@
 
 **剪贴板报错。** 使用 HTTPS 页面，检查浏览器或脚本管理器的剪贴板权限，先在普通窗口里试试。
 
-**还是不行。** B 站偶尔会换装修，按钮和输入框也可能跟着搬家。欢迎 [开个 Issue](https://github.com/GarryRong/BiliClip/issues/new)，带上这些线索：
+**还是不行。** B 站偶尔会换装修，按钮和输入框也可能跟着搬家。欢迎 [开个 Issue](https://github.com/GarryJung/BiliClip/issues/new)，带上这些线索：
 
 - 浏览器名称和版本；
 - 用的是扩展版还是脚本版，以及版本号；
@@ -134,8 +134,8 @@ python3 -m http.server 8000
 
 > 用心创作，终会万众瞩目！
 
-[X / Twitter：小丁猫同学](https://x.com/TavvCat) · [GitHub：GarryRong](https://github.com/GarryRong) · [Email：i@lcat.cc](mailto:i@lcat.cc) · [Reddit：u/garryjung](https://www.reddit.com/user/garryjung/)
+[X / Twitter：小丁猫同学](https://x.com/TavvCat) · [GitHub：GarryJung](https://github.com/GarryJung) · [Email：i@lcat.cc](mailto:i@lcat.cc) · [Reddit：u/garryjung](https://www.reddit.com/user/garryjung/)
 
-还做了一个小工具：**[ScrollFerry](https://github.com/GarryRong/ScrollFerry)**，帮忙处理小鹅通题库上传。欢迎顺路逛逛。
+还做了一个小工具：**[ScrollFerry](https://github.com/GarryJung/ScrollFerry)**，帮忙处理小鹅通题库上传。欢迎顺路逛逛。
 
 如果喵贴刚好帮你省下了一点重复劳动，给仓库点颗 ⭐，就当请小丁猫同学吃了口罐头。
