@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BiliClip 喵贴 — B站一键填充BV码和标题</title>
 <link rel="canonical" href="https://bv.lcat.cc/">
-<meta name="description" content="复制B站视频BV码和标题，在创作中心按一次粘贴自动填入两个输入框。支持浏览器扩展与油猴脚本。">
+<meta name="description" content="复制B站视频BV码和标题，在创作中心按一次粘贴自动填入两个输入框。支持浏览器扩展与油猴脚本，8.1.0 脚本新增投稿标签预设。">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="BiliClip 喵贴">
 <meta property="og:locale" content="zh_CN">
 <meta property="og:title" content="BiliClip 喵贴 — B站一键填充BV码和标题">
-<meta property="og:description" content="复制B站视频BV码和标题，在创作中心按一次粘贴自动填入两个输入框。支持浏览器扩展与油猴脚本。">
+<meta property="og:description" content="复制B站视频BV码和标题，在创作中心按一次粘贴自动填入两个输入框。支持浏览器扩展与油猴脚本，8.1.0 脚本新增投稿标签预设。">
 <meta property="og:url" content="https://bv.lcat.cc/">
 <meta property="og:image" content="https://bv.lcat.cc/assets/og-biliclip-square.png">
 <meta property="og:image:secure_url" content="https://bv.lcat.cc/assets/og-biliclip-square.png">
@@ -21,7 +21,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@TavvCat">
 <meta name="twitter:title" content="BiliClip 喵贴 — B站一键填充BV码和标题">
-<meta name="twitter:description" content="复制B站视频BV码和标题，在创作中心按一次粘贴自动填入两个输入框。支持浏览器扩展与油猴脚本。">
+<meta name="twitter:description" content="复制B站视频BV码和标题，在创作中心按一次粘贴自动填入两个输入框。支持浏览器扩展与油猴脚本，8.1.0 脚本新增投稿标签预设。">
 <meta name="twitter:image" content="https://bv.lcat.cc/assets/og-biliclip.png">
 <meta name="twitter:image:alt" content="BiliClip 喵贴 — B站一键复制、填充 BV 码和标题">
 <link rel="apple-touch-icon" sizes="180x180" href="https://bv.lcat.cc/assets/apple-touch-icon.png">
@@ -272,6 +272,26 @@ code { font: .88em var(--mono); color:var(--pink); background:var(--pink-dim); p
 
 
 .footer-social-column a:focus-visible { outline:2px solid var(--pink); outline-offset:4px; border-radius:4px; }
+
+.release-link { display:inline-flex; align-items:center; gap:8px; margin:12px 0; color:var(--pink-2); font-size:14px; font-weight:600; }
+.release-link:hover { text-decoration:underline; }
+.release-panel { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); align-items:center; gap:clamp(24px,5vw,68px);
+  padding:clamp(22px,5vw,56px); border:1px solid var(--border-2); border-radius:24px;
+  background:radial-gradient(ellipse at 95% 15%,rgba(251,114,153,.16),transparent 62%),var(--card); }
+.release-panel .lead { margin:12px 0 20px; }
+.tag-demo { padding:clamp(14px,3vw,24px); border:1px solid var(--border-2); border-radius:16px; background:var(--bg-2);
+  box-shadow:0 16px 36px rgba(0,0,0,.22); }
+.tag-demo h3 { font-size:15px; margin-bottom:8px; }
+.demo-tags { display:flex; flex-wrap:wrap; gap:7px; min-height:34px; }
+.demo-tags span { padding:2px 9px; border-radius:7px; background:var(--card-2); color:var(--text); font-size:13px; }
+.demo-preset { display:flex; flex-wrap:wrap; gap:9px; align-items:center; justify-content:space-between;
+  margin-top:16px; padding:12px; border:1px solid rgba(251,114,153,.55); border-radius:10px; }
+.demo-preset .demo-tags span { background:var(--pink-dim); color:var(--pink-2); }
+.demo-preset .btn-p,.tag-demo .btn-s { padding:4px 11px; min-height:34px; font-size:13px; }
+.demo-footer { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin-top:10px; }
+.demo-footer p { color:var(--text-2); font-size:13px; }
+.tag-demo button:disabled { opacity:.55; cursor:default; transform:none; }
+@media (max-width:720px) { .release-panel { grid-template-columns:1fr; } }
 </style>
 </head>
 <body id="top">
@@ -300,6 +320,7 @@ code { font: .88em var(--mono); color:var(--pink); background:var(--pink-dim); p
     <div class="hero-grid">
       <div>
         <h1>B站<span class="hl">一键填充</span><br>BV码和标题</h1>
+        <a class="release-link" href="#tag-presets">8.1.0 脚本更新 · 投稿标签预设 <span aria-hidden="true">↓</span></a>
         <p class="hero-sub">复制 BV 与标题，创作中心一次粘贴填好两个框</p>
         <p class="hero-author-line">作者：小丁猫同学（Garry Jung）</p>
         <p class="hero-desc">在视频卡片或详情页复制 BV + 标题，再到创作中心打开“关联视频”，按一次粘贴即可填入两个输入框。</p>
@@ -424,6 +445,31 @@ code { font: .88em var(--mono); color:var(--pink); background:var(--pink-dim); p
   </div>
 </section>
 
+
+<section class="section" id="tag-presets" aria-labelledby="tag-presets-title">
+  <div class="section-inner">
+    <div class="release-panel">
+      <div>
+        <h2 class="h2" id="tag-presets-title">常用标签，按预设填入</h2>
+        <p class="lead">在投稿表单里按回车保存标签。脚本最多保存 5 条预设，每条最多 10 个标签。执行时按剩余名额，从前往后逐个添加。</p>
+        <a class="btn-p" href="/biliclip.user.js">安装 8.1.0 脚本</a>
+      </div>
+      <div class="tag-demo" aria-label="标签预设交互演示">
+        <h3>投稿标签 · 演示</h3>
+        <div class="demo-tags" id="demo-draft-tags"><span>生活记录</span><span>学习</span><span>经验分享</span><span>日常</span><span>创作</span><span>分享</span><span>视频</span><span>记录</span></div>
+        <div class="demo-preset">
+          <div class="demo-tags" aria-label="示例预设"><span>创作笔记</span><span>拍摄技巧</span><span>剪辑入门</span></div>
+          <button class="btn-p" type="button" id="demo-apply">执行</button>
+        </div>
+        <div class="demo-footer">
+          <p id="demo-tag-status" role="status">还可以添加 2 个标签</p>
+          <button class="btn-s" type="button" id="demo-reset" disabled>重置演示</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ===== 安装 ===== -->
 <section class="section" id="install">
   <div class="section-inner">
@@ -457,7 +503,7 @@ code { font: .88em var(--mono); color:var(--pink); background:var(--pink-dim); p
     </div>
     <div class="install-grid">
       <div class="steps-card">
-        <h3>油猴脚本安装（可选方式）</h3>
+        <h3>油猴脚本 8.1.0</h3>
         <div class="step-item">
           <div class="step-num">1</div>
           <div><h4>安装脚本管理器</h4><p>在浏览器扩展商店安装 <a href="https://www.tampermonkey.net/" target="_blank" title="前往Tampermonkey官网" rel="noopener noreferrer" class="resource-links"><svg class="link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10 13 4-4m-6 8-2 2a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m4-2 2-2a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/></svg>Tampermonkey</a>
@@ -507,7 +553,15 @@ code { font: .88em var(--mono); color:var(--pink); background:var(--pink-dim); p
     <p class="lead">保留与你使用有关的变化。以下为脚本版本记录，扩展版本以各商店页面为准。</p>
     <div class="cl-timeline">
       <div class="cl-item latest"><div class="cl-card">
-        <h3 class="cl-ver">v7.2.1 <span class="cl-badge">脚本当前版本</span></h3>
+        <h3 class="cl-ver">v8.1.0 <span class="cl-badge">脚本当前版本</span></h3>
+        <p class="cl-desc">新增投稿标签预设、重复和上限提示、按余量顺序填充，以及一键清空投稿标签。安装后的使用教程只自动显示一次。</p>
+      </div></div>
+      <div class="cl-item"><div class="cl-card">
+        <h3 class="cl-ver">v8.0.1</h3>
+        <p class="cl-desc">完善投稿工作台和关联视频库，加入分场景操作引导。</p>
+      </div></div>
+      <div class="cl-item"><div class="cl-card">
+        <h3 class="cl-ver">v7.2.1</h3>
         <p class="cl-desc">智能粘贴仅在 B 站生效；复制新内容后退出旧任务，避免影响其他网站的正常粘贴。</p>
       </div></div>
       <div class="cl-item"><div class="cl-card">
@@ -529,7 +583,7 @@ code { font: .88em var(--mono); color:var(--pink); background:var(--pink-dim); p
     <div class="eyebrow">HOW IT WORKS</div>
     <h2 class="h2">技术说明</h2>
     <p class="lead">以下概述脚本的工作方式，具体实现可在开源仓库中查看。</p>
-    <div class="tech-grid"><div class="tech-card"><div class="tech-head"><span class="tech-num">01</span><h3>识别视频信息</h3></div><p class="tech-body">从视频页面或卡片读取 BV 码与标题；标题缺失时，脚本可能请求 B 站接口补全。</p></div><div class="tech-card"><div class="tech-head"><span class="tech-num">02</span><h3>按场景粘贴</h3></div><p class="tech-body">在创作中心打开“关联视频”后，一次粘贴填写 BV 与标题；普通 B 站输入区域可交替粘贴。</p></div><div class="tech-card"><div class="tech-head"><span class="tech-num">03</span><h3>新复制内容优先</h3></div><p class="tech-body">复制其他内容时取消旧任务，智能粘贴仅在 B 站内生效。</p></div><div class="tech-card"><div class="tech-head"><span class="tech-num">04</span><h3>减少页面干扰</h3></div><p class="tech-body">使用独立浮层和样式隔离显示按钮，随页面位置变化调整，不改动原有页面布局。</p></div>
+    <div class="tech-grid"><div class="tech-card"><div class="tech-head"><span class="tech-num">01</span><h3>识别视频信息</h3></div><p class="tech-body">从视频页面或卡片读取 BV 码与标题；标题缺失时，脚本可能请求 B 站接口补全。</p></div><div class="tech-card"><div class="tech-head"><span class="tech-num">02</span><h3>按场景粘贴</h3></div><p class="tech-body">在创作中心打开“关联视频”后，一次粘贴填写 BV 与标题；普通 B 站输入区域可交替粘贴。</p></div><div class="tech-card"><div class="tech-head"><span class="tech-num">03</span><h3>新复制内容优先</h3></div><p class="tech-body">复制其他内容时取消旧任务，智能粘贴仅在 B 站内生效。</p></div><div class="tech-card"><div class="tech-head"><span class="tech-num">04</span><h3>减少页面干扰</h3></div><p class="tech-body">复制按钮使用独立浮层。标签预设嵌在投稿表单中，位于参与话题和简介之间。</p></div>
     </div>
     <p class="resource-links"><a href="https://github.com/GarryJung/BiliClip" target="_blank" rel="noopener noreferrer"><svg class="link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path fill="currentColor" stroke="none" d="M12 .7a11.3 11.3 0 0 0-3.57 22.02c.56.1.77-.24.77-.54v-2.1c-3.14.68-3.8-1.33-3.8-1.33-.51-1.3-1.26-1.65-1.26-1.65-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.01 1.73 2.65 1.23 3.3.94.1-.73.4-1.23.72-1.51-2.51-.29-5.15-1.26-5.15-5.59 0-1.23.44-2.24 1.17-3.03-.12-.29-.51-1.43.11-2.97 0 0 .95-.3 3.11 1.16a10.8 10.8 0 0 1 5.66 0c2.16-1.46 3.1-1.16 3.1-1.16.63 1.54.24 2.68.12 2.97.73.79 1.16 1.8 1.16 3.03 0 4.34-2.64 5.3-5.17 5.58.41.36.77 1.04.77 2.1v3.1c0 .3.2.65.78.54A11.3 11.3 0 0 0 12 .7Z"/></svg>查看开源仓库 ↗</a></p>
   </div>
@@ -586,6 +640,35 @@ code { font: .88em var(--mono); color:var(--pink); background:var(--pink-dim); p
 </footer>
 
 <script>
+
+(() => {
+  const draft = document.getElementById('demo-draft-tags');
+  const apply = document.getElementById('demo-apply');
+  const reset = document.getElementById('demo-reset');
+  const status = document.getElementById('demo-tag-status');
+  const added = [];
+  apply.addEventListener('click', () => {
+    const preset = apply.closest('.demo-preset').querySelectorAll('.demo-tags span');
+    const existing = new Set([...draft.children].map(tag => tag.textContent));
+    const available = Math.max(0, 10 - draft.children.length);
+    for (const tag of [...preset].filter(tag => !existing.has(tag.textContent)).slice(0, available)) {
+      const copy = tag.cloneNode(true);
+      draft.append(copy);
+      added.push(copy);
+    }
+    status.textContent = `已添加 ${added.length} 个标签，剩余 ${10 - draft.children.length} 个名额`;
+    apply.disabled = true;
+    reset.disabled = false;
+  });
+  reset.addEventListener('click', () => {
+    added.splice(0).forEach(tag => tag.remove());
+    status.textContent = `还可以添加 ${10 - draft.children.length} 个标签`;
+    apply.disabled = false;
+    reset.disabled = true;
+    apply.focus();
+  });
+})();
+
 // ===== 演示动画 =====
 (function() {
   var pane1 = document.getElementById('pane1');
