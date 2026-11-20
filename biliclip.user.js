@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BiliClip 喵贴  B站一键填充BV码和标题
 // @namespace    https://www.bilibili.com/
-// @version      8.1.0
+// @version      8.1.1
 // @description  复制B站视频BV码和标题，在创作中心按一次粘贴自动填入两个输入框。
 // @author       Garry Jung
 // @match        http://*/*
@@ -20,7 +20,7 @@
   'use strict';
 
   const KEY = 'biliclip_pair_v72';
-  const FIRST_RUN_GUIDE_KEY = 'biliclip_first_run_spotlight_shown';
+  const TUTORIAL_REVISION = '8.1.1-scene-guides-r1';
   const PANEL_LOGO = '<img class="panel-logo" width="18" height="18" alt="" draggable="false" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAABGdBTUEAALGPC/xhBQAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAAARGVYSWZNTQAqAAAACAABh2kABAAAAAEAAAAaAAAAAAADoAEAAwAAAAEAAQAAoAIABAAAAAEAAAAwoAMABAAAAAEAAAAwAAAAANs3bAwAAAHNaVRYdFhNTDpjb20uYWRvYmUueG1wAAAAAAA8eDp4bXBtZXRhIHhtbG5zOng9ImFkb2JlOm5zOm1ldGEvIiB4OnhtcHRrPSJYTVAgQ29yZSA2LjAuMCI+CiAgIDxyZGY6UkRGIHhtbG5zOnJkZj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+CiAgICAgIDxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSIiCiAgICAgICAgICAgIHhtbG5zOmV4aWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20vZXhpZi8xLjAvIj4KICAgICAgICAgPGV4aWY6Q29sb3JTcGFjZT4xPC9leGlmOkNvbG9yU3BhY2U+CiAgICAgICAgIDxleGlmOlBpeGVsWERpbWVuc2lvbj4xMjU0PC9leGlmOlBpeGVsWERpbWVuc2lvbj4KICAgICAgICAgPGV4aWY6UGl4ZWxZRGltZW5zaW9uPjEyNTQ8L2V4aWY6UGl4ZWxZRGltZW5zaW9uPgogICAgICA8L3JkZjpEZXNjcmlwdGlvbj4KICAgPC9yZGY6UkRGPgo8L3g6eG1wbWV0YT4KdDO1SAAAFPxJREFUaAXtWXl4VNXZ/507SyYzmSxkIQkEshACRNbIZkCQRUAWEcRWP4VW61JFXFutRduKCEVQQUClQlEWQSrgggoqyA5CQCBsgQAJCdnXmclkZu497/eeCYHYp7j06/N8//R9cnPP3HuWd39/51zgv/T/qwHxby/v7BQN3TsYJCOgaYfRUHD4Z83lSOkOQ8+CEG6YLN/AnV/+s8b/nzo707IRknQmNKwDxcV1I4S288HRfh7PafoJ82oITZ4Na5K3TWwPCo/MINiSziMsedBPGPsf6BKbGQZr29z+vUZS7pYDRuWfNxiv9LuPTKHtCfb2D//oCvbkB8229vTG8/Op9t1dxplbZhoD4/qyEG2PAYn2Hx3/Tx20f/r94z89rgwYRpfpQ8ZRZhW06JOleDq5L25P6Ah2ielwpLS+5iSO5Hju88Kd6T0xtX0WInaeRgdLuPZUdGcCIQNh5uRrjr3Gi58vgCYaYNb0S1sPAusOwFBRFNBpeko/6bDaEiCNx6+xFiDp6Si7M/GF5H4S6/aRUVoHNAaQV18lIOBlxdRfc+w1XvwUn/3+UH9dDaxRXffXXMpM9UJmWqM0Q0iKD3FqRX4PHawu7gpL1Dro3K8lhaV3huF769mMbOuEiGRNQkqTu9G0LO+AnF5zTPgEvQtv0eqWQ35K++cLADa2bvvMo1H8x3UF3bMpXKRGxmrQhMx0RGNl2elQr6HbWYDPmAFlYb6yzNDq3kiPjOu5LHOktEki4Q2Y3s8/LH9Vsc9ohDEf3otPcF/5U5hu2ednCpBpRWh4IqyWFEDU6qQP+tJ1yTEOsRTtDEdkiF3zki6/KT3dDSJsPF8P8vUARN39zNvgN7qPRm9bKxN8AbHj/En6RclOERCymFPpuzBHR8AebUWk1QePJ9CSyR9q/3gdUEFp0EgEfDezD3dn/2+DkJAIhz1UhNsd5LSH0ARne8yMywqqu1oGaHrDSU03a8IiTMybim0dcSKEng/rLM26gQZPg3i0aC9yfNVw635R6/cJV6ARfr/fw51LeJ0jMJs+h9n2MdxnK/49AVp3c6Cu7nGe9bfhMa3a9MrIQO+UDsiMSUBqSAQlwEJRfgGHj2Dy6aS5GiE8XvYk9hinvcmyBnsEXV5ecsPjkVIIkhazECYT8RPRKAguYaBK+lHQ6NKOe6qwq7IQO0vyUeuuK4RmfhXe1EXAN/q/EuRfWyAiIwUN7vdahUcMeHTCRNzTK1um1XGeuFQjUO0GXA0q8zBzioXmKfje3FbMqnfBi7uSbpzz1IoEm5PCLTZT0FSKm+ahzX3VeIsF7KI4LxvkmwWHtIV5++HVfRth1e5FXeH3E0OLKa4KZ++cgED95p6p6V3fe3MeXVdjFli+jbkISAitKe3qOnn8Pqr2NaDS34CKgBdVfi/q2A1cug8Nhh9+MqCzNSRp2Oa+hDKnEDZXgH7hTEGMxQqnyYwoiw1xVjtah4Tx3YEIa4gGs1lZjYLChYSIbbXFcvLxz7Qib/1mNBoTgEusvavUrIPmJxpX2bUd4hNv3/r8LJkU3UqTa/cYWp3XVOuul9sqzmN7bQFyvVUoCDSISmbSJUxkmEIAcyhrjwup1SHYdwmWMKD6DFB/Ac/+6Rkx9cHJ+OjjzXhk2rPcN5Lg4HrXWAvGU7AbPhErJXXiMcMj2+PO1tchMSJKpVpDE2bT/qqLcmTe51qt9M+Gt/APzcyq+/cFcCSPMBv0+ScvvISRHTOFXLSZJxCm9wuOyj9d2oszJisQmQ60UleKQGRbgjMesEcBIQ5mXgnBwhD3u3QK2DAZ82b8Vjz52EMC+cVAWhu8vnApPTF9MWHiCu7vBHxcu7zVYPcAyk8ARTvQru4ilrYfhmGJHTQpyOBCY5qXv5eerjzk5STSB+7C481CfF8Ac8LGUZnX3/rZLx4mOpwvRY3HtChvv5xazlU3839g7z0Frdu1BYWGoNRv5gC8ogDiDN5kdhVqtRwnK+7A/bd2FEveel3Q7mOSDp4i0S1dGIN7iJEjJ+Lr8nTCqFmcXTkLqMCXJNDo5fiqIhxaLFqf/gf2dbodya1igx7lqqpFr/xPtXzDxUF98almAa7WgdAObSHkX1++Yawt84JbCK9f5JQW0B3nvxaGxoHFKTEMxYhqF48CaxvNxxHBxVSxrS71n92BLy9zs+tNdNZysGbNMmGrqAftPsouxb5dUQNTYoyW1D0Tqxa9ImTyMCA0igtjgFXBQa/7OdYMQnwWPEU7hOYqx4joFI1FkzZYTEXuGuzxlbeCHrGUfTOYlZqCUolj+LJiI6MjB4bEyGDAcr5++eJB2OOi8MGqBeLLv08T92TqonzJr+H/+wMSNUVNQW1w6tBZOlYeKhjTFHxL4ugyzJn9JxEZ7hQyJ4+EodJME9GBU3Jg/z7o3ysVOLaRGTc12THAtcvnY/eTAiHhQIfx+Lj+gvD7fJIl0MDdhtvj2VqmVDgsjByb6KoAUu+aGRWP+AA/4kpfWFtJn9YU4pmnHsakCWPEsJ69xfz5c8TBPZvEfb05M/1tLDOwWaKiBNjxjsSKuwRW3CJCPrpbTBzdV4wePQLk8hCx6VmDQvh1CFYKiivI7PaKiRNvBS5s5UB2M4xj6c/t4Tj5SqChQqBot0BZLi4EPLS65BjqAw3Evo8MSzhFaJxjpd6pWQC262USlNYlLIa1oGvKJw/UlZI/zCrGjrkZyMmD3JdroF2CaH9jN+2dpYsxZNg6TH3yGarxGOjZMRYj7xosBgz4NVJTk5GU1EYpIRgrYtJgQY1c8VRcXKwg5BVCFJZiwKABsP5lEfzVhUDu+0K7tA0mezgCORWMVpxo13c4LkWNwdSIBMw8vQ/LwtPkDVo44kw21ElfUjPbVwUgxCRZOJMoLfHiR91ViEmMY5453Z08IoXy4aIyog+3GzQsS7vrzkkiLS0NlRUVGD78Jlit1isJgYLEQaHKRpgdwmkHxUYKpCcJ0Zt3YIakZA6h6HAblRxcgtDAOcxduxHt2rTGa8u3oNTDW7seIzRLDevAAXF2xxfyj+ufwMb4YYjRQnAGxJpuoqsCmDRHlEqTxAvrEgXeOsSnxZIjxCbIy76piN2dGryCSqog28VR3z69gkwrfqXBwXe5T7ACB3/wo6D7Kx+6HAdhoWA4gUhe5jdT7sDLM2Zj0owl4uFB8cG5NifE0M7SDhS4dHkCL5G540DsHDoN9+1aAQcXRibWdBMFfwWbApZQtaVVFjAMVAa8ItwZxrVXY/DCicYXANmsgsZmC9G3i0p7KgnxK45QJfTlSa7cmMkrSZabmmbiuTgSFczgy8QFZsyooXCkZYnH7hrGw3hdTmVDu7ZCevkB4PR3nCgUchBCD3VoSBqBjVzxv23geoImKbhxBZWojlzcFakFJBq5yvIabMvLMjrtAmNvEGjPmuL3qlvwX/DOTaU/dV0hfsF/gudQSjiWe5J27trP+eSqzua89pYYMmYCeiXZRQln213nicbfmCwOLxggPvqVQ0wMPYqwkzsJJ87I2Pp8THl1FUy3PMmV3HELbPHJV5YKNmxt9qzOnkZ08xyigTPoJkcP2XPQWN56sJJ3HDGMS5VSJ0mGobO3GJIh8tX7tdrcT42fPXeRTM3oYyxYvFT9Vo/o6NETMqzDcLn3bC0/M+iXa3XpfEE3Bi7R5b6LwXHcz6ATZ8vkzKX75Mc7zwXHvprDrtjzSVaNkyVhWVpKweux1po0p2BxVU2dwuiw3HAdq5H9mOdV/YVqs1ZVO+j7ylJBdasnze0mzc+YvYBenjWfXvzz70S/3r1Q73JRuNMp5i5YiuwRY9EvLUIcvmTQmsPAA/0hDhYBL35D6Bxj0NBUYFTHGNE5La5pfq6UHg+zzKWCKcj7VXty9BrKlzlpK7KZTVRaWIRD3+WyczGzl2NQsGA+nx9fb91B584XkGZivw76U9O45n7Kbb47cpxefOk1tE1KxHoGcnf/+lH6Ztd+FBYW00fbv8MfH72LRxK9tB3oGi+oykM4x7DoVz2AJRwGBYz1St2g578yqNYrqd5npmVbOboLtzVyYd6i+GxpAQpIDiTFB2vUyuFhZmwezjmZSYGF4HP1/qW/LsCrryxEeFQkPvt4JfXq2ZXDQgWh6tP0TzlKfOtYbNqwHP36Z4kwBnmN+ReFPSoCD82ci96DR2JgRrRw+ww6Va4SAolwzsQM2pHIQFZp1s4IZtRyQj0jjN8NEHj/OMT5resYLxVsgV77nVrpqgWYxUaD4YXyEkYGoX7CuAm3oEundKEgj5KBtYrKyirk5eUj47ouKCsqxOx5i/kVxyZbRllHZRqVJjl4RQNX2OHDb2TGQiA27yf7nlxR+OEW+uCLffjDY5ODc1o48e1nsPpUtkAN5/+5I5X1uZ4y009u4kM/FmLHbxjkciVe8BUDveNrOLGEXODBQWppAd2jwBQzkeetkielF3+ZMKa5X5Nm2Y1CQ23Yf/AICs8V8qwOHDt+mjdnOjU0eBlR27F06SrK2fA5xSQnUc7pM+KjTavJwXqSNt4hd0vHq0veEd0HjcBNmXEip5iD933QrZkQU/txXejT5L/7CwWpDd8wDr0l44HwEBLvHgVOfLGO95/neV2G7ZdL01ULcKZ3B1gAMmOJKwfejhdht0YGBVD+rFyIsz7CwsLEbeNHcb1gdQVcyEhPJQu72sIl7+HO7LEQL7+N2dU6Hjx4Bje4fFTv5b2y3Qbt5r6iKCmKVu4+Rn94dDJ7GrHfAw/2g/iQ0X0Gn6xOWC1o23mNuicKHONDlpW3M/NWEo26mV77qpYsx1ZRtIn9C8SMNtFVCxC5GknH6eoqWZ1eI9Y/nUoz37iPDh2YjFtvG4/0tGQlg7roxScfhsNsQXVdHZ55+pFg1IwYPZwsC1bQwwMGa5TWnk8hNBF25KDUFcrkUexUeH3+O+h8fbYY2iNRbDpt0NZ84JH+Ao/1Bz45RZi3Cxj+DmfJtsAT2UAy75PM7GLrT0Mc+Xwd3eapF9XmSGw3ylyX+W8RxCZzyVcVF5GfegRzZwyj1HZl2nOTNshJz5dSRpfuomOHFEH1HpL7j8NZWo2ZI0YJ3NgjOI+qyN0yOuAfQ/vjHJkplSFyfU2trG3lFK1jWqk+oqSknFZv2kNr1q1Q9V5YuEB+fEJi4V7CWC7sT3OQ7noQOFRMmLsTeGoTcF0s0Lm1ieZtqYP5u/fwWGgnelLPUworDS7M/1q4EM4U+esRWheOD1augydvg5yzthOWr9kuhg/pD52zCoo4XTCSlCGMaONbKYMESbmYldPpQzOfEUu0Brx9NEfOLj4rbn1kMkLMFl6QmdubwxDKJfZ8/QU++fQLGpjgxsmnTeK9SQBXYQx4i9CPr3xGD8tvFzj1ONAtgcSHp4Q49Nla3OZ2Uzd7HIo4NtmX2XZNFEx6waYtflCSPWZbbtJ4Wlh0BLnZX4ki/wiaMHoMzp27IObNeYHNxZ7LRyqag4PIahEHDx2h3bsPwOV2o0NaChT0trG/n8w7i9ZxsYiNjFT7LPx9xXq5+M2/iV68E0tIbE3nzxXh9JmzYs6s6Rg0sD9jLYN2cU5YuBf4iOOhbTSfAt0LxIeb0Gd+DXJfGksHtFQ+0eQNcdXWOkn6dfAWF12W4fLN2SZahLYr2Z41jfw9pxujInsbWbZMI2vgWMPl9kivT5c+vxGEE+4Gr3zgkWeMm2/5pTFrzhty8dvvynvvf0L2vXGcPHz0VLDkc9FmxyJau36L7DdonDydlx98ruqDok8+32507jlEFpeU8XMFCAPB60SpLt/cp0uuD3JlLlt96ELjTltPg1J/T6/Ej+U02IYd7Hue00IOa/wHj7cfTTT4ZTKynjcWx44zxkx5yHj8uZeMEbffaxSW1htqmfsfec6Y9tQLRoDPivjnFXp72Ro5cPgdRn2DbpRWuozd3+YafQfdZuQcOhrs14SjdA4ZFo/pnvueMLpOWSrfOUJUybCZSDlqkyANDLy6/LVc2qL6GEdaTzao4++M7MgsFqDtsy04Zp9oSfY2o+M1x6c56eMoMSJSVHrcckPBKYQECBv5yPJipxi075iC6qoqfPnpSj4dNCksFKwRqsj5uF/2kAnsNRJl1dUoOleAlA6pOHvkGwWdFCxnlaqCqOAHMO3Zl+UbryzhaB0rEofejXvH9sE9PYVI4+w9azfw/O9n0QOH1+PtxCFis7cIo2t31xlS9EDjhQvNbHNCaEGBrPNureSGcq837TZHG3I4QrWsVomie2yCuMPRjm4o5+DadwhhI7MwfvRwlQCCjKgKrCqvziBr2d9WYsqRAO7S4zAlNAUn3ZUIpCXAy5DBGebkkmAVX+4+JL/ee5A2vLkaKyyZGMV98vauFqu+/gZLTphp7RkHffDhFrTZuwirI/uSn2PkrroDoow86khlfQuO/8kC6o0zJYOPOb6e6sho80r89WRzhgppMfEJBGtOQjtXXiZ/aTuDFxfP5NMIwvCBvUVFtUuu/+xLnDybL8oWbKAP2g3mD3m8u2NIcaauSs6o+A6XqBGOQd1FUnoyDq3ahG51gqa06oj+8e2V9DC8Prm96gKWMu7P0RiNsq1mObrDThZxt+tbsVOWfYUGfTxQ5vlhAdRbe9L1jG9WZlviMqY7O2NIWIK02mx87MhKZ1f5ouiMXOkrQJkIIGJwd+Eqr6GYnAJcZ4vGQ/FdEBnp5BN5VfL4MEFh74AhDL8ud9UUo8TrwbDodoiJiGDgpLrwOYqCWrqhoYEbXi58ho8q9QDW+IrFbN9pFJNnI0z0G7iKq1oyr9rfj4GWb9V3Ael7DsI8uZcpKnKYNQ7Xm6OQYrYj0WRHmM5nfuzPxz011IrBWpfIOBaQkRebqYmUAGoFXkKtotoK6jBY5O0Qu4XOGMqAjwGkOxAQNQEfSthKpww39hs12KlXcrVqyOVRr6OhaDnfL8NdbrUgNfUPk61dKp/YMaqTNzF3nUzCFBPGezq7MPExrsnkFNYg9DYxoxbm1MxMsta51QQfVNAq3jm/8HaEEOAA9zGmamRJ+JL8RcdoIMPvZifiLz51vA5/ExCHWOov4SFOmUXqyOya9OMCfG9ohxA4jEg+AoxgkzpAhpX31+oogzEVmdgfOCk0ZRhmucXIYD1jifhLBu/rGPHySyPAsD3AFvNBt/KhrcUNt48xzg8z3GLS/zb/q4H/hAb+F7pTKbZTOfUOAAAAAElFTkSuQmCC">';
   const PANEL_LOGO_CSS = '.panel-logo{width:18px;height:18px;vertical-align:-4px;margin-right:5px}';
   let autoKnowledge = GM_getValue('biliclip_auto_knowledge', true) !== false;
@@ -35,6 +35,7 @@
   let declarationBusy = false;
   const TAG_PRESET_KEY = 'biliclip_upload_tag_preset_v1';
   const TAG_INPUT_SELECTOR = 'input[placeholder*="创建标签"], input[placeholder*="添加标签"], input[placeholder*="Enter"][placeholder*="标签"]';
+  const MAX_TAG_PRESETS = 10;
   const MAX_PRESET_TAGS = 10;
   let tagPresetRow;
   let clearTagsBar;
@@ -85,7 +86,6 @@
   // 不应提前丢弃配对，否则无法在清空表单后重新填充。
 
   if (isBili) {
-    GM_registerMenuCommand('喵贴 · 使用教程', () => ready(() => openTutorialManual()));
     GM_registerMenuCommand('喵贴 · 重新开始引导', () => ready(replayTutorial));
     GM_registerMenuCommand('喵贴 · 上传简介设置', () => ready(openUploadSettings));
     GM_registerMenuCommand('喵贴 · 标题填入简介第一行（含第二行预设）', () => ready(() => fillUploadDescription(true)));
@@ -97,7 +97,7 @@
   });
 
   ready(() => {
-    setTimeout(showFirstRunGuide, 0);
+    setTimeout(startTutorialOnce, 0);
     if (isMember) {
       syncTagPreset();
       syncUploadPanel();
@@ -108,7 +108,7 @@
         syncUploadPanel();
         syncVideoPicker();
         syncCreatorPanelContext();
-        showFirstRunGuide();
+        startTutorialOnce();
         if (panelExecuting || declarationPending) return;
         if (!declarationBusy && autoKnowledge) applyKnowledge(true);
         if (!knowledgeBusy && declarationPrefs.auto) applyDeclaration(true);
@@ -122,7 +122,7 @@
       createBiliUI();
 
       setInterval(
-        () => { createBiliUI(); showFirstRunGuide(); },
+        () => { createBiliUI(); startTutorialOnce(); },
         1500
       );
     }
@@ -149,8 +149,6 @@
   }
 
 
-  /* 8.1.0：独立教程不修改业务表单，所有内容在隔离的 Shadow DOM 中展示。 */
-  const TUTORIAL_CHAPTERS = [["开始前：安装与更新", ["在 Tampermonkey 或 Violentmonkey 中打开 8.1.0 脚本，确认安装或替换旧代码并保存；扩展版与脚本版只启用一种，避免重复按钮。", "更新后刷新整个 B 站页面，包含创作中心和个性化卡片编辑器；仅关闭重开组件可能仍使用旧代码。", "本教程只讲解，不会替你修改表单。使用“上一步 / 下一步”顺序阅读，也可在目录中跳转。关闭后可从脚本管理器菜单重新打开。"]], ["视频卡片与详情页：复制信息", ["在 B 站视频列表把鼠标停在视频封面上，点击“复制 BV + 标题”。如果卡片没有标题，脚本会尝试向 B 站接口查询。", "打开视频详情页，可分别使用“复制 BV”“复制标题”或“复制 BV + 标题”。需要配对填充时选择组合复制。", "播放器进入网页全屏或浏览器播放器全屏后，复制控件会隐藏；退出后恢复。找不到按钮时先退出全屏并刷新页面。"]], ["粘贴：一次填两框与交替粘贴", ["先组合复制，再进入创作中心打开“个性化卡片 → 关联视频 → 添加关联视频”，等待 BV / 链接和描述文案输入框出现。已有卡片可先展开设置。", "在任意一个关联输入框按 Ctrl+V（Mac 为 ⌘+V），或使用右键粘贴；喵贴把 BV 填入链接框、标题填入描述文案。检查两个字段后自行提交组件。", "在普通 B 站输入区，组合复制后按 BV → 标题顺序交替粘贴。只复制单项则按普通文本使用。", "中途复制其他文字后，实际剪贴板优先；想继续配对请重新组合复制。视频库搜索框中粘贴只用于搜索，不触发配对填充。"]], ["投稿工作台：显示位置与一键执行", ["进入视频投稿编辑表单，填写当前视频标题。上传初始选择文件页不显示工作台；输入框出现后再找右侧“喵贴 · 投稿工作台”。", "依次确认标题抄录、创作声明、自制授权、知识分区、简介第二行、推广、更多设置，再点击“一键执行”。设置会自动保存，下次继续读取。", "一键执行会应用保存的更多设置开关和商业推广状态，再处理声明、分区、简介。勾选标题抄录时必须先有投稿标题。", "执行后阅读面板底部每一项的结果；后续步骤失败不代表前面的修改已回滚。核对 B 站表单后自行投稿，喵贴不会自动投稿。"]], ["喵贴·标签预设", ["在「参与话题」和「简介」之间输入标签，按回车保存。每条预设最多 10 个标签，重复标签会提示。", "点击标签旁的 × 删除单个标签，点击每行左侧的「删除」移除整条预设，点击右侧的「执行」将该条预设追加到投稿标签栏。", "点「增加一条预设」可增加一组，最多保存 5 条。"]], ["标题与简介：哪些行会被替换", ["勾选“抄录到简介第一行”，一键执行时使用当前投稿标题替换简介第一行；不勾选则保留原第一行。", "在“第二行引导话术”填写预设，例如“更多内容请查看我的主页”。有预设时一键执行会替换第二行；空预设不代表清空现有第二行。第三行及后续文字保留。", "脚本管理器菜单提供“上传简介设置”“标题填入简介第一行（含第二行预设）”“填入简介第二行预设”。后者仅替换第二行，前者按当前标题与预设处理。", "主动执行会覆盖对应行，建议先保存重要文案。简介与标题框未出现时，先进入完整投稿编辑页再操作。"]], ["创作声明与自制授权", ["点击工作台“声明”打开选择浮层。主声明为单选：不设置主声明、内容无需标注、含AI生成内容、含虚构演绎内容、内容含营销信息、个人观点，仅供参考、内容为转载。请按稿件实际情况选择。", "选择后立即保存并尝试应用到 B 站，浮层关闭；再次点击当前项可重新应用。“不设置主声明”是预设留空，一键执行不会据此主动清除已有主声明。", "“内容为自制：未经作者允许，禁止转载”为独立授权：勾选立即添加，取消立即移除，不改变主声明。内容为转载时不可添加该自制授权。", "连续切换会排队执行，请等面板提示完成，并核对 B 站原生选项是否一致。"]], ["分区、商业推广与更多设置", ["勾选“知识”表示一键执行时选择知识分区；不勾选则跳过该步骤，不会恢复先前分区。是否自动选择由下方独立开关决定。", "“增加商业推广信息”勾选或取消会立即同步 B 站对应选项并保存。一键执行也会应用保存的开关，包括取消状态；新页面不会仅因加载预设就修改推广选项。", "“自动展开页面『更多设置』”勾选会立即尝试展开，取消会尝试收起；一键执行也应用此状态。找不到入口时请进入完整表单并查看状态提示。"]], ["自动执行：三个独立开关", ["展开底部“自动执行设置”。“自动选择知识分区”默认开启，编辑页检测到可用控件后尝试选择知识；不需要时先关闭。它与一键执行的“知识”勾选分别控制自动和手动行为。", "“自动选择预设声明”按保存的声明与授权设置尝试应用；开启前先核对预设适用于当前稿件。", "“自动补充空白第二行”默认关闭；开启且存在预设后，仅补充空白第二行，每个简介框补一次，手动删除后不会持续反复补回。已有第二行不会被自动覆盖。", "自动模式不会自动投稿，也不会持续把标题抄录到简介第一行；完整处理仍可主动点击一键执行。"]], ["关联视频库：打开与读取自己的稿件", ["投稿页只有打开个性化卡片编辑器时才显示“喵贴 · 关联视频库”，关闭编辑器后移除；稿件管理页独立显示。普通投稿表单没有该面板是正常行为。", "登录自己的 B 站账号，点击“刷新我的视频”开始读取已发布稿件。不会在每次打开页面时自动联网刷新；等待状态提示完成，读取间隔约 1.2 秒，最多获取最新 2000 条。", "列表按账号缓存于脚本管理器，不保存 Cookie；请求失败保留旧列表。切换账号后需在对应账号重新刷新，旧缓存的封面或播放量缺失也可通过刷新更新。", "每条展示封面、标题、BV、发布日期、播放量。搜索输入标题片段或 BV，在缓存中本地过滤，最多展示前 100 条；结果太多时缩小关键词范围。"]], ["关联视频库：推荐、填入和复制", ["先填写当前投稿标题，再点击“相关推荐”：清空搜索词，按自己已发布稿件与当前标题的词语匹配排序；无匹配时按最新稿件排序，不是全站推荐。", "先在 B 站组件中展开关联视频两个输入框，再点击某条稿件的“填入”。BV 和该视频标题分别进入链接与描述文案，不替换当前投稿标题。查看视频库状态提示确认是否成功。", "“复制”只组合复制该条 BV 与标题；到目标字段按粘贴即可。适合跨页使用。", "跨域卡片编辑器也可填入，但更新脚本后必须刷新整个投稿页。时间段冲突时先在 B 站处理已有卡片，喵贴不会删除它们，也不会自动提交或关闭组件。"]], ["面板布局：收起、拖动与缩放", ["点击标题栏“−”收起，点击同名标签展开。每次进入页面默认展开，工作台右侧空间不足时可能先显示为标签。", "拖动顶部标题栏移动面板，收起时也能拖标签；位移超过 5px 才算拖动。用四边或四角手柄调整宽高，内容在面板内部滚动，标题栏保留在顶部。", "位置与尺寸分别记忆，窗口缩小时会约束边界。稿件管理页视频库避让左侧导航；投稿页卡片浮窗打开时视频库吸附在其外侧左边，工作台位于编辑器下层。吸附状态会约束自由拖动位置。", "上传初始页、确认弹窗或关键操作遮挡时，面板可能暂时隐藏，条件解除后恢复。不要为找面板误点投稿。"]], ["排查问题与完成练习", ["无复制按钮：刷新页面，确认脚本和管理器已启用、允许访问 B 站，退出全屏并排除重复安装。剪贴板失败时检查 HTTPS 和权限。", "填入失败：重新组合复制；展开正确关联字段；更新后刷新整个父页面和编辑器。视频库无结果时先检查登录、刷新状态与搜索词。", "工作台未生效：检查是否进入支持的视频投稿路由、控件是否可见、面板状态是否报告缺失。B 站页面变化可能需要适配；自动设置不会代替人工检查。", "练习：组合复制一条视频 → 在关联框粘贴并核对 → 设置简介预设并一键执行 → 刷新视频库、搜索并填入一条 → 调整面板尺寸。每步检查结果，最后手动决定是否提交。", "反馈请提供浏览器、管理器、8.1.0 版本、页面链接、复现步骤和打码截图；不要发送 Cookie 或登录凭据。点击“完成教程”记录已读，也可随时重看。"]]];
   // 场景式实操引导：目标来自当前真实页面，不创建模拟业务控件。
   function associationGuideControl(kind) {
     const wanted=kind==='tab' ? /^关联视频$/ : /^[+＋]?\s*添加关联视频$/;
@@ -200,12 +198,11 @@
       GM_setValue('biliclip_button_progress_v3_' + scene, 0);
     }
     GM_setValue('biliclip_walkthrough_active_801', false);
+    GM_setValue('biliclip_tutorial_revision', TUTORIAL_REVISION);
   }
 
-  function showFirstRunGuide() {
-    if (!isBili || window.top !== window.self || location.pathname === '/web/player/index.html') return;
-    if (GM_getValue(FIRST_RUN_GUIDE_KEY, false)) return;
-    startTutorialOnce(true);
+  function ensureTutorialRevision() {
+    if (GM_getValue('biliclip_tutorial_revision', '') !== TUTORIAL_REVISION) resetTutorialProgress();
   }
 
   function replayTutorial() {
@@ -215,20 +212,13 @@
     startTutorialOnce();
   }
 
-  function startTutorialOnce(firstRun = false) {
+  function startTutorialOnce() {
+    ensureTutorialRevision();
     if (!isBili || document.getElementById('biliclip-walkthrough')) return;
-    const unseen=scene=>firstRun || !GM_getValue('biliclip_button_guide_v3_'+scene,false);
-    const launch = scene => {
-      if (firstRun) {
-        if (GM_getValue(FIRST_RUN_GUIDE_KEY, false)) return;
-        GM_setValue(FIRST_RUN_GUIDE_KEY, true);
-        GM_setValue('biliclip_button_progress_v3_' + scene, 0);
-      }
-      openTutorial(scene);
-    };
+    const unseen=scene=>!GM_getValue('biliclip_button_guide_v3_'+scene,false);
     const inEditor=location.pathname==='/web/player/index.html' && window.parent!==window;
     if(inEditor) {
-      if(unseen('association') && (associationGuideControl('tab') || associationGuideControl('add'))) launch('association');
+      if(unseen('association') && (associationGuideControl('tab') || associationGuideControl('add'))) openTutorial('association');
       return;
     }
     if(window.top!==window.self)return;
@@ -237,14 +227,14 @@
     const workbench=document.getElementById('biliclip-upload-panel');
     const frames=creatorEditorFrames();
     if(frames.some(({frame})=>creatorElementVisible(frame))) {
-      if(unseen('library') && visible(library) && frames.some(({frame})=>openEditorFrames.has(frame)) && (firstRun || !unseen('association'))) launch('library');
+      if(unseen('library') && visible(library) && frames.some(({frame})=>openEditorFrames.has(frame)) && !unseen('association')) openTutorial('library');
       return;
     }
-    if(unseen('workbench') && visible(workbench)) {launch('workbench');return;}
-    if(unseen('card') && isMember && tutorialCardEntry()) {launch('card');return;}
+    if(unseen('workbench') && visible(workbench)) {openTutorial('workbench');return;}
+    if(unseen('card') && isMember && tutorialCardEntry()) {openTutorial('card');return;}
     if(unseen('copy') && !isMember) {
       pinHomeGuideCover();
-      if(tutorialSteps('copy')[0].target())launch('copy');
+      if(tutorialSteps('copy')[0].target())openTutorial('copy');
     }
   }
 
@@ -276,7 +266,7 @@
         step('应用投稿预设','确认选项后点击「一键执行」，填写简介并应用所选设置。',panel('#execute'),'execute'),
         step('检查执行结果','这里会显示执行结果；确认后再手动投稿。',panel('.status')),
         ...(tagPresetRow?.isConnected ? [step('喵贴·标签预设',
-          '输入标签后按回车保存，每条最多 10 个。点 × 删除单个标签，点右侧「执行」追加到投稿标签栏。下方最多可加到 5 条预设。',
+          '输入标签后按回车保存，每条最多 10 个。点 × 删除单个标签，点右侧「执行」追加到投稿标签栏。下方最多可加到 10 条预设。',
           () => tagPresetRow?.shadowRoot?.querySelector('.entry, .add'))] : [])
       ];
     }
@@ -462,37 +452,6 @@
     const track=()=>{if(disposed)return;update();if(!disposed)frame=window.requestAnimationFrame(track);};
     const timer=typeof window.requestAnimationFrame==='function'?null:setInterval(update,80);
     render();if(typeof window.requestAnimationFrame==='function')frame=window.requestAnimationFrame(track);
-  }
-
-  function openTutorialManual(chapter = 0) {
-    const existing = document.getElementById('biliclip-tutorial');
-    if (existing) { existing.shadowRoot.querySelector('dialog').focus(); return; }
-    const previous = document.activeElement;
-    const host = document.createElement('div'); host.id = 'biliclip-tutorial';
-    const root = host.attachShadow({mode:'open'});
-    root.innerHTML = `<style>
-      *{box-sizing:border-box}dialog{color-scheme:light;background:#fff;color:#18191c;border:1px solid #dce5ef;border-radius:16px;width:760px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);padding:0;font:14px/1.8 system-ui,"PingFang SC",sans-serif}dialog::backdrop{background:#10182899}header,footer{padding:16px 20px;display:flex;gap:12px;align-items:center;justify-content:space-between}h2{font-size:18px;margin:0}button,select{font:inherit;border:1px solid #dce5ef;border-radius:8px;padding:7px 12px;background:#f3f9ff;color:#12648b;cursor:pointer}button:disabled{opacity:.4;cursor:default}select{width:100%;margin-top:8px}main{padding:0 20px;overflow:auto;max-height:55dvh}li{margin:12px 0}ol{padding-left:24px}h3{font-size:17px}progress{width:100%;accent-color:#00aeec} .intro{padding:0 20px;color:#61666d}footer{flex-wrap:wrap}:focus-visible{outline:2px solid #008abc;outline-offset:2px}
-      </style><dialog aria-labelledby="title" tabindex="-1"><header><h2 id="title">喵贴 8.1.0 · 全功能使用教程</h2><button id="close" aria-label="关闭教程">关闭</button></header><div class="intro">仅讲解，不执行操作。随时关闭后可从面板或脚本菜单重看。<label>章节目录<select aria-label="章节目录"></select></label><progress></progress><span id="count" aria-live="polite"></span></div><main tabindex="0"><h3></h3><ol></ol></main><footer><button id="prev">上一步</button><button id="next">下一步</button><button id="done">完成教程</button></footer></dialog>`;
-    const get = selector => root.querySelector(selector);
-    let index = chapter;
-    TUTORIAL_CHAPTERS.forEach(([title], i) => { const option = document.createElement('option'); option.value = i; option.textContent = (i+1) + '. ' + title; get('select').append(option); });
-    const render = () => {
-      const [title, steps] = TUTORIAL_CHAPTERS[index];
-      get('h3').textContent = title; get('ol').replaceChildren();
-      steps.forEach(text => { const li = document.createElement('li'); li.textContent = text; get('ol').append(li); });
-      get('select').value = index; get('progress').max = TUTORIAL_CHAPTERS.length; get('progress').value = index+1;
-      get('#count').textContent = '第 ' + (index+1) + ' / ' + TUTORIAL_CHAPTERS.length + ' 章';
-      get('#prev').disabled = index === 0; get('#next').disabled = index === TUTORIAL_CHAPTERS.length-1;
-      get('#done').hidden = index !== TUTORIAL_CHAPTERS.length-1; get('main').scrollTop = 0;
-    };
-    const close = () => { host.remove(); if (previous?.isConnected) previous.focus(); };
-    get('#close').onclick = close;
-    get('dialog').addEventListener('cancel', event => { event.preventDefault(); close(); });
-    get('#prev').onclick = () => { index--; render(); };
-    get('#next').onclick = () => { index++; render(); };
-    get('select').onchange = event => { index = Number(event.target.value); render(); };
-    get('#done').onclick = () => { GM_setValue('biliclip_tutorial_seen_801', true); close(); };
-    document.body.append(host); render(); get('dialog').showModal(); get('#close').focus();
   }
 
   function clean(value) {
@@ -690,6 +649,7 @@
     ready(() => {
       let lastOpen = null;
       setInterval(() => {
+        startTutorialOnce();
         const open = !!findCreatorFields();
         if (open === lastOpen) return;
         lastOpen = open;
@@ -1686,7 +1646,7 @@
     const saved = GM_getValue(TAG_PRESET_KEY, '');
     const splitTags = value => [...new Set(value.split(/[,，、；;\n]+/).map(tag => tag.trim()).filter(Boolean))];
     const presets = Array.isArray(saved)
-      ? saved.filter(Array.isArray).slice(0, 5).map(tags => tags.filter(tag => typeof tag === 'string'))
+      ? saved.filter(Array.isArray).slice(0, MAX_TAG_PRESETS).map(tags => tags.filter(tag => typeof tag === 'string'))
       : [splitTags(typeof saved === 'string' ? saved : '')];
     const persist = () => GM_setValue(TAG_PRESET_KEY, presets);
 
@@ -1701,7 +1661,7 @@
         status.textContent = '执行中断，请核对标签栏';
       } finally {
         buttons.forEach(button => { button.disabled = false; });
-        add.disabled = presets.length >= 5;
+        add.disabled = presets.length >= MAX_TAG_PRESETS;
       }
     }
 
@@ -1758,7 +1718,7 @@
         persist();
         const next = entry.nextElementSibling || entry.previousElementSibling;
         entry.remove();
-        add.disabled = presets.length >= 5;
+        add.disabled = presets.length >= MAX_TAG_PRESETS;
         (next?.querySelector('.delete-preset') || add).focus();
         status.textContent = '已删除预设';
       });
@@ -1772,14 +1732,14 @@
     }
 
     presets.forEach(appendPreset);
-    add.disabled = presets.length >= 5;
+    add.disabled = presets.length >= MAX_TAG_PRESETS;
     add.addEventListener('click', () => {
-      if (presets.length >= 5) return;
+      if (presets.length >= MAX_TAG_PRESETS) return;
       const tags = [];
       presets.push(tags);
       persist();
       appendPreset(tags).focus();
-      add.disabled = presets.length >= 5;
+      add.disabled = presets.length >= MAX_TAG_PRESETS;
     });
     return row;
   }
@@ -2003,7 +1963,7 @@
     input.focus();
   }
 
-  /* ==================== 8.1.0 上传页右侧悬浮面板 ==================== */
+  /* ==================== 8.1.1 上传页右侧悬浮面板 ==================== */
 
   function clickUploadControl(element) {
     const view = element.ownerDocument.defaultView;
@@ -2877,7 +2837,7 @@
       </style>
       <button class="tab" type="button">喵贴 · 投稿工作台</button>
       <aside class="panel" aria-label="投稿工作台">
-        <header><h2>${PANEL_LOGO}喵贴 · 投稿工作台<small>8.1.0</small></h2><button class="collapse" type="button" aria-label="收起面板">−</button></header>
+        <header><h2>${PANEL_LOGO}喵贴 · 投稿工作台<small>8.1.1</small></h2><button class="collapse" type="button" aria-label="收起面板">−</button></header>
         <div class="body">
           <button id="execute" type="button" class="primary">一键执行</button>
           <div class="row"><span class="name">标题</span><label class="toggle"><input id="copy-title" type="checkbox" checked>抄录到简介第一行</label></div>
