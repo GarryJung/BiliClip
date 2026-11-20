@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BiliClip 喵贴  B站一键填充BV码和标题
 // @namespace    https://www.bilibili.com/
-// @version      8.1.2
+// @version      8.1.3
 // @description  复制B站视频BV码和标题，在创作中心按一次粘贴自动填入两个输入框。
 // @author       Garry Jung
 // @match        http://*/*
@@ -653,6 +653,48 @@
     });
   }
 
+  function creatorDraftIdentity(url) {
+    const params = url.searchParams;
+    const bv = params.get('bvid') || params.get('bv') || getBV(url.href);
+    const aid = (params.get('aid') || params.get('avid') || '').replace(/^av/i, '');
+    return {
+      bv: /^BV[0-9A-Za-z]{10}$/.test(bv || '') ? bv : '',
+      aid: /^[1-9]\d*$/.test(aid) ? aid : ''
+    };
+  }
+
+  function currentCreatorDraft() {
+    if (location.pathname === '/web/player/index.html' && window.parent !== window) {
+      return creatorDraftIdentity(new URL(location.href));
+    }
+    const entry = creatorEditorFrames().find(({frame}) => creatorElementVisible(frame));
+    if (entry) {
+      const frameDraft = creatorDraftIdentity(new URL(entry.frame.src, location.href));
+      if (frameDraft.bv || frameDraft.aid) return frameDraft;
+      const reportedDraft = creatorFrameDrafts.get(entry.frame);
+      if (reportedDraft) return reportedDraft;
+    }
+    return isManuscriptManagementPage() ? creatorDraftIdentity(new URL(location.href)) : { bv: '', aid: '' };
+  }
+
+  const creatorFrameDrafts = new WeakMap();
+  const creatorDraftLookups = new Map();
+  const creatorDraftBVs = new Map();
+
+  function resolveCreatorDraftBV(aid) {
+    if (!creatorDraftLookups.has(aid)) {
+      const lookup = pickerApi('/x/web-interface/view', {aid}).then(data =>
+        /^BV[0-9A-Za-z]{10}$/.test(data.bvid || '') ? data.bvid : ''
+      ).catch(() => '').then(bv => {
+        if (bv) creatorDraftBVs.set(aid, bv);
+        else creatorDraftLookups.delete(aid);
+        return bv;
+      });
+      creatorDraftLookups.set(aid, lookup);
+    }
+    return creatorDraftLookups.get(aid);
+  }
+
   function fillCreatorFrame(value) {
     const frames = creatorEditorFrames();
     if (!frames.length) return Promise.resolve(false);
@@ -676,6 +718,14 @@
     if (!isMember || event.data?.type !== 'biliclip-editor-state') return;
     const entry = creatorEditorFrames().find(({frame, origin}) => frame.contentWindow === event.source && origin === event.origin);
     if (!entry) return;
+    const bv = event.data.draftBV;
+    const aid = event.data.draftAid;
+    if (/^BV[0-9A-Za-z]{10}$/.test(bv || '') || /^[1-9]\d*$/.test(aid || '')) {
+      creatorFrameDrafts.set(entry.frame, {
+        bv: /^BV[0-9A-Za-z]{10}$/.test(bv || '') ? bv : '',
+        aid: /^[1-9]\d*$/.test(aid || '') ? aid : ''
+      });
+    } else creatorFrameDrafts.delete(entry.frame);
     if (event.data.guiding === true) guidedEditorFrames.add(entry.frame);
     else guidedEditorFrames.delete(entry.frame);
     if (event.data.open === true) {
@@ -687,14 +737,18 @@
     ready(() => {
       let lastOpen = null;
       let lastGuiding = null;
+      let lastDraft = null;
       setInterval(() => {
         startTutorialOnce();
         const open = !!findCreatorFields();
         const guiding = !!document.getElementById('biliclip-walkthrough');
-        if (open === lastOpen && guiding === lastGuiding) return;
+        const {bv: draftBV, aid: draftAid} = currentCreatorDraft();
+        const draft = draftBV + ':' + draftAid;
+        if (open === lastOpen && guiding === lastGuiding && draft === lastDraft) return;
         lastOpen = open;
         lastGuiding = guiding;
-        window.parent.postMessage({type:'biliclip-editor-state', open, guiding}, 'https://member.bilibili.com');
+        lastDraft = draft;
+        window.parent.postMessage({type:'biliclip-editor-state', open, guiding, draftBV, draftAid}, 'https://member.bilibili.com');
       }, 800);
     });
   }
@@ -717,6 +771,17 @@
   });
 
   async function fillCreatorPair(current) {
+    const draft = currentCreatorDraft();
+    let draftBV = draft.bv || creatorDraftBVs.get(draft.aid);
+    if (!draftBV && draft.aid && !current.aid) {
+      draftBV = await resolveCreatorDraftBV(draft.aid);
+      const active = currentCreatorDraft();
+      if (active.aid !== draft.aid || active.bv !== draft.bv) return false;
+    }
+    if ((draftBV && draftBV === current.bv) || (draft.aid && draft.aid === current.aid)) {
+      toast('不能把当前稿件关联到自己', 'pink', 2600);
+      return false;
+    }
     const fields = findCreatorFields();
     if (!fields) {
       if (isMember && await fillCreatorFrame(current)) return true;
@@ -774,28 +839,15 @@
   }
 
   function checkReminder() {
-    if (
-      !pair ||
-      !document.body ||
-      !isCreatorPage()
-    ) {
-      return;
-    }
-
-    const key =
-      `${pair.savedAt}:${location.href}`;
-
-    if (key === reminderKey) {
-      return;
-    }
-
+    if (!pair || !document.body || !isBili) return;
+    const inEditor = location.pathname === '/web/player/index.html' && window.parent !== window;
+    if ((!isMember && !inEditor) || !findCreatorFields()) return;
+    const draft = currentCreatorDraft();
+    if (draft.bv && draft.bv === pair.bv) return;
+    const key = `${pair.savedAt}:${location.href}`;
+    if (key === reminderKey) return;
     reminderKey = key;
-
-    toast(
-      '已复制 BV + 标题｜打开「关联视频」后，在任一输入框按 Ctrl+V 或右键粘贴，自动填充两个输入框',
-      'blue',
-      4300
-    );
+    toast('关联视频可直接从视频库填入，也可粘贴已复制的 BV + 标题', 'blue', 3200);
   }
 
   /* ==================== 输入框识别 ==================== */
@@ -2004,7 +2056,7 @@
     input.focus();
   }
 
-  /* ==================== 8.1.2 上传页右侧悬浮面板 ==================== */
+  /* ==================== 8.1.3 上传页右侧悬浮面板 ==================== */
 
   function clickUploadControl(element) {
     const view = element.ownerDocument.defaultView;
@@ -2548,7 +2600,7 @@
     for (const row of rows) {
       const item = row?.Archive || row?.archive || row;
       if (!/^BV[0-9A-Za-z]{10}$/.test(item?.bvid || '') || !clean(item.title)) continue;
-      videos.set(item.bvid, { bv: item.bvid, title: clean(item.title), created: Number(item.ptime || item.pubdate || item.ctime || item.created) || 0, cover: pickerCover(item.cover || item.pic), duration: Number(item.duration) || 0, play: Number(row?.stat?.view ?? item.stat?.view ?? item.play) || 0 });
+      videos.set(item.bvid, { bv: item.bvid, aid: String(item.aid || row?.aid || ''), title: clean(item.title), created: Number(item.ptime || item.pubdate || item.ctime || item.created) || 0, cover: pickerCover(item.cover || item.pic), duration: Number(item.duration) || 0, play: Number(row?.stat?.view ?? item.stat?.view ?? item.play) || 0 });
     }
     return [...videos.values()].sort((a, b) => b.created - a.created);
   }
@@ -2668,8 +2720,10 @@
     if (host && host.dataset.account !== account) { host.remove(); host = null; pickerState = null; }
     if (host) {
       const title = clean(findUploadFields()?.title?.value);
-      if (pickerState && pickerState.uploadTitle !== title) {
+      const draft = currentCreatorDraft();
+      if (pickerState && (pickerState.uploadTitle !== title || pickerState.draft.bv !== draft.bv || pickerState.draft.aid !== draft.aid)) {
         pickerState.uploadTitle = title;
+        pickerState.draft = draft;
         pickerState.render();
       }
       return;
@@ -2692,7 +2746,7 @@
         :focus-visible{outline:2px solid #00aeec;outline-offset:2px}
         @media(max-width:900px){aside{width:240px}}
       </style>
-      <button type="button" class="tab">喵贴 · 关联视频库</button>
+      <button type="button" class="tab">${PANEL_LOGO}喵贴 · 关联视频库</button>
       <aside aria-label="关联视频库"><header><h2>${PANEL_LOGO}喵贴 · 关联视频库</h2><button type="button" id="collapse" aria-label="收起视频面板">−</button></header>
       <div class="body"><input id="query" type="search" placeholder="搜索我的视频标题 / BV" aria-label="搜索视频标题或 BV">
       <div class="tools"><button type="button" id="refresh">刷新</button><button type="button" id="videos">我的视频</button><button type="button" id="collections">合集</button></div>
@@ -2700,7 +2754,7 @@
     const get = id => root.getElementById(id);
     const uid = document.cookie.match(/(?:^|;\s*)DedeUserID=(\d+)/)?.[1];
     const cacheKey = uid ? 'biliclip_my_videos_v1_' + uid : null;
-    const state = { videos: [], uploadTitle: clean(findUploadFields()?.title?.value), busy: false, render: null, mode: 'videos', collections: [], collectionVideos: [], selected: null, collectionBusy: false, request: 0 };
+    const state = { videos: [], draft: currentCreatorDraft(), uploadTitle: clean(findUploadFields()?.title?.value), busy: false, render: null, mode: 'videos', collections: [], collectionVideos: [], selected: null, collectionBusy: false, request: 0 };
     pickerState = state;
     let statusTimer;
     const status = text => {
@@ -2727,7 +2781,18 @@
         if (!get('list').childNodes.length) get('list').textContent = state.collections.length ? '没有匹配的合集' : '暂无合集';
         return;
       }
-      let videos = (state.mode === 'collection' ? state.collectionVideos : state.videos).filter(v => !query || v.title.toLowerCase().includes(query) || v.bv.toLowerCase().includes(query));
+      const draft = state.draft;
+      const currentBV = draft.bv || creatorDraftBVs.get(draft.aid);
+      const videos = (state.mode === 'collection' ? state.collectionVideos : state.videos)
+        .filter(v => v.bv !== currentBV && (!draft.aid || v.aid !== draft.aid))
+        .filter(v => !query || v.title.toLowerCase().includes(query) || v.bv.toLowerCase().includes(query));
+      if (!draft.bv && draft.aid && state.resolvingDraftAid !== draft.aid) {
+        state.resolvingDraftAid = draft.aid;
+        void resolveCreatorDraftBV(draft.aid).then(bv => {
+          const active = currentCreatorDraft();
+          if (bv && host.isConnected && active.aid === draft.aid) state.render();
+        });
+      }
 
       get('list').replaceChildren();
       for (const video of videos.slice(0, 100)) {
@@ -2736,7 +2801,18 @@
         const bv = document.createElement('div'); bv.className = 'bv'; bv.textContent = video.bv;
         const actions = document.createElement('div'); actions.className = 'actions';
         for (const [label, action] of [
-          ['填入', async () => { status('正在填入关联视频…'); try { const ok = await fillCreatorPair(video); status(ok ? '已填入' : '未填入：请先在个性化卡片中添加关联视频。更新脚本后需刷新整个页面'); } catch (error) { status('填入失败：' + error.message); } }],
+          ['填入', async () => {
+            const active = currentCreatorDraft();
+            const bv = active.bv || creatorDraftBVs.get(active.aid);
+            if (video.bv === bv || (active.aid && video.aid === active.aid)) { status('不能把当前稿件关联到自己'); return; }
+            status('正在填入关联视频…');
+            try {
+              const ok = await fillCreatorPair(video);
+              status(ok ? '已填入' : '未填入：请先打开关联视频的两个输入框');
+            } catch (error) {
+              status('填入失败：' + error.message);
+            }
+          }],
           ['复制', () => { savePair(video.bv, video.title); status('已复制'); }]
         ]) {
           const button = document.createElement('button'); button.type = 'button'; button.textContent = label;
@@ -2876,9 +2952,9 @@
         .tab{display:none;background:#00aeec;color:white;font:600 13px/1.5 system-ui,sans-serif}:host([data-collapsed]) .panel{display:none}:host([data-collapsed]) .tab{display:block}
         :focus-visible{outline:2px solid #00aeec;outline-offset:2px}
       </style>
-      <button class="tab" type="button">喵贴 · 投稿工作台</button>
+      <button class="tab" type="button">${PANEL_LOGO}喵贴BiliClip</button>
       <aside class="panel" aria-label="投稿工作台">
-        <header><h2>${PANEL_LOGO}喵贴 · 投稿工作台<small>8.1.2</small></h2><button class="collapse" type="button" aria-label="收起面板">−</button></header>
+        <header><h2>${PANEL_LOGO}喵贴BiliClip<small>8.1.3</small></h2><button class="collapse" type="button" aria-label="收起面板">−</button></header>
         <div class="body">
           <button id="execute" type="button" class="primary">一键执行</button>
           <div class="row"><span class="name">标题</span><label class="toggle"><input id="copy-title" type="checkbox" checked>抄录到简介第一行</label></div>
