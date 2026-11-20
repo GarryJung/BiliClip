@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BiliClip 喵贴  B站一键填充BV码和标题
 // @namespace    https://www.bilibili.com/
-// @version      8.1.1
+// @version      8.1.2
 // @description  复制B站视频BV码和标题，在创作中心按一次粘贴自动填入两个输入框。
 // @author       Garry Jung
 // @match        http://*/*
@@ -20,7 +20,7 @@
   'use strict';
 
   const KEY = 'biliclip_pair_v72';
-  const TUTORIAL_REVISION = '8.1.1-scene-guides-r1';
+  const TUTORIAL_SEEN_PREFIX = 'biliclip_spotlight_seen_';
   const PANEL_LOGO = '<img class="panel-logo" width="18" height="18" alt="" draggable="false" src="data:image/png;base64,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">';
   const PANEL_LOGO_CSS = '.panel-logo{width:18px;height:18px;vertical-align:-4px;margin-right:5px}';
   let autoKnowledge = GM_getValue('biliclip_auto_knowledge', true) !== false;
@@ -192,17 +192,19 @@
     ui.tutorialCover=null;ui.active=null;ui.hover.style.display='none';
   }
 
-  function resetTutorialProgress() {
-    for (const scene of ['copy','workbench','card','association','library']) {
-      GM_setValue('biliclip_button_guide_v3_' + scene, false);
-      GM_setValue('biliclip_button_progress_v3_' + scene, 0);
-    }
-    GM_setValue('biliclip_walkthrough_active_801', false);
-    GM_setValue('biliclip_tutorial_revision', TUTORIAL_REVISION);
+  function tutorialSeen(scene) {
+    const key = TUTORIAL_SEEN_PREFIX + scene;
+    const seen = GM_getValue(key, null);
+    if (seen !== null) return seen;
+    const legacySeen = GM_getValue('biliclip_button_guide_v3_' + scene, false);
+    GM_setValue(key, legacySeen);
+    return legacySeen;
   }
 
-  function ensureTutorialRevision() {
-    if (GM_getValue('biliclip_tutorial_revision', '') !== TUTORIAL_REVISION) resetTutorialProgress();
+  function resetTutorialProgress() {
+    for (const scene of ['copy','workbench','card','association','library']) {
+      GM_setValue(TUTORIAL_SEEN_PREFIX + scene, false);
+    }
   }
 
   function replayTutorial() {
@@ -213,9 +215,8 @@
   }
 
   function startTutorialOnce() {
-    ensureTutorialRevision();
     if (!isBili || document.getElementById('biliclip-walkthrough')) return;
-    const unseen=scene=>!GM_getValue('biliclip_button_guide_v3_'+scene,false);
+    const unseen=scene=>!tutorialSeen(scene);
     const inEditor=location.pathname==='/web/player/index.html' && window.parent!==window;
     if(inEditor) {
       if(unseen('association') && (associationGuideControl('tab') || associationGuideControl('add'))) openTutorial('association');
@@ -227,7 +228,7 @@
     const workbench=document.getElementById('biliclip-upload-panel');
     const frames=creatorEditorFrames();
     if(frames.some(({frame})=>creatorElementVisible(frame))) {
-      if(unseen('library') && visible(library) && frames.some(({frame})=>openEditorFrames.has(frame)) && !unseen('association')) openTutorial('library');
+      if(unseen('library') && visible(library) && frames.some(({frame})=>openEditorFrames.has(frame) && !guidedEditorFrames.has(frame)) && !unseen('association')) openTutorial('library');
       return;
     }
     if(unseen('workbench') && visible(workbench)) {openTutorial('workbench');return;}
@@ -357,10 +358,8 @@
 
   function openTutorial(scene = 'copy') {
     if (document.getElementById('biliclip-walkthrough')) return;
-    GM_setValue('biliclip_walkthrough_active_801',true);
     const steps=tutorialSteps(scene);
-    const progressKey='biliclip_button_progress_v3_' + scene;
-    let index=Math.max(0,Math.min(steps.length-1,Number(GM_getValue(progressKey,0))||0));
+    let index=0;
     let disposed=false, actionSeen=false, completed=false, lastTarget=null, initialRect=null;
     let pairBefore=pair, due=0, editedAt=0, busySeen=false;
     const previous=document.activeElement;
@@ -430,11 +429,11 @@
     const render=()=>{
       actionSeen=false;completed=false;busySeen=false;lastTarget=null;initialRect=null;due=0;pairBefore=pair;
       if(steps[index].action==='association') expandCreatorMoreSettings(true,true);
-      GM_setValue(progressKey,index);get('.count').textContent='喵贴 · '+(index+1)+' / '+steps.length;
+      get('.count').textContent='喵贴 · '+(index+1)+' / '+steps.length;
       get('h2').textContent=steps[index].title;get('#text').textContent=steps[index].text;update();
     };
-    const close=()=>{if(scene==='copy')releaseHomeGuideCover();if(frame)window.cancelAnimationFrame?.(frame);GM_setValue('biliclip_button_guide_v3_' + scene,true);disposed=true;GM_setValue('biliclip_walkthrough_active_801',false);clearInterval(timer);for(const name of ['click','change','input'])document.removeEventListener(name,observe,true);document.removeEventListener('keydown',escape,true);host.remove();if(previous?.isConnected)previous.focus();};
-    const advance=()=>{if(index===steps.length-1){GM_setValue('biliclip_walkthrough_done_801',true);GM_setValue(progressKey,0);close();}else{index++;render();}};
+    const close=()=>{if(scene==='copy')releaseHomeGuideCover();if(frame)window.cancelAnimationFrame?.(frame);disposed=true;clearInterval(timer);for(const name of ['click','change','input'])document.removeEventListener(name,observe,true);document.removeEventListener('keydown',escape,true);host.remove();if(previous?.isConnected)previous.focus();};
+    const advance=()=>{if(index===steps.length-1){close();}else{index++;render();}};
     const observe=event=>{
       const t=target(),path=event.composedPath();if(!t||!path.includes(t)||path.includes(host))return;
       const action=steps[index].action;
@@ -445,8 +444,10 @@
       // Let the original click/change handlers apply their changes before moving the spotlight.
     };
     const escape=event=>{if(event.key==='Escape')close();};
-    get('#close').onclick=close;get('#skip').onclick=()=>{GM_setValue('biliclip_walkthrough_done_801',true);GM_setValue(progressKey,0);close();};get('#prev').onclick=()=>{if(index>0){index--;render();}};get('#next').onclick=advance;
+    get('#close').onclick=close;get('#skip').onclick=close;get('#prev').onclick=()=>{if(index>0){index--;render();}};get('#next').onclick=advance;
     document.body.append(host);if(typeof host.showPopover==='function')host.showPopover();
+    // A refresh or closing a tab also ends this automatic showing.
+    GM_setValue(TUTORIAL_SEEN_PREFIX + scene, true);
     for(const name of ['click','change','input'])document.addEventListener(name,observe,true);document.addEventListener('keydown',escape,true);
     let frame=0;
     const track=()=>{if(disposed)return;update();if(!disposed)frame=window.requestAnimationFrame(track);};
@@ -636,10 +637,13 @@
   }
 
   const openEditorFrames = new WeakSet();
+  const guidedEditorFrames = new WeakSet();
   window.addEventListener('message', event => {
     if (!isMember || event.data?.type !== 'biliclip-editor-state') return;
     const entry = creatorEditorFrames().find(({frame, origin}) => frame.contentWindow === event.source && origin === event.origin);
     if (!entry) return;
+    if (event.data.guiding === true) guidedEditorFrames.add(entry.frame);
+    else guidedEditorFrames.delete(entry.frame);
     if (event.data.open === true) {
       if (!openEditorFrames.has(entry.frame)) document.getElementById('biliclip-video-picker')?.removeAttribute('data-collapsed');
       openEditorFrames.add(entry.frame);
@@ -648,12 +652,15 @@
   if (isBili && location.pathname === '/web/player/index.html' && window.parent !== window) {
     ready(() => {
       let lastOpen = null;
+      let lastGuiding = null;
       setInterval(() => {
         startTutorialOnce();
         const open = !!findCreatorFields();
-        if (open === lastOpen) return;
+        const guiding = !!document.getElementById('biliclip-walkthrough');
+        if (open === lastOpen && guiding === lastGuiding) return;
         lastOpen = open;
-        window.parent.postMessage({type:'biliclip-editor-state', open}, 'https://member.bilibili.com');
+        lastGuiding = guiding;
+        window.parent.postMessage({type:'biliclip-editor-state', open, guiding}, 'https://member.bilibili.com');
       }, 800);
     });
   }
@@ -1963,7 +1970,7 @@
     input.focus();
   }
 
-  /* ==================== 8.1.1 上传页右侧悬浮面板 ==================== */
+  /* ==================== 8.1.2 上传页右侧悬浮面板 ==================== */
 
   function clickUploadControl(element) {
     const view = element.ownerDocument.defaultView;
@@ -2837,7 +2844,7 @@
       </style>
       <button class="tab" type="button">喵贴 · 投稿工作台</button>
       <aside class="panel" aria-label="投稿工作台">
-        <header><h2>${PANEL_LOGO}喵贴 · 投稿工作台<small>8.1.1</small></h2><button class="collapse" type="button" aria-label="收起面板">−</button></header>
+        <header><h2>${PANEL_LOGO}喵贴 · 投稿工作台<small>8.1.2</small></h2><button class="collapse" type="button" aria-label="收起面板">−</button></header>
         <div class="body">
           <button id="execute" type="button" class="primary">一键执行</button>
           <div class="row"><span class="name">标题</span><label class="toggle"><input id="copy-title" type="checkbox" checked>抄录到简介第一行</label></div>
