@@ -216,27 +216,44 @@
 
   function startTutorialOnce() {
     if (!isBili || document.getElementById('biliclip-walkthrough')) return;
-    const unseen=scene=>!tutorialSeen(scene);
-    const inEditor=location.pathname==='/web/player/index.html' && window.parent!==window;
-    if(inEditor) {
-      if(unseen('association') && (associationGuideControl('tab') || associationGuideControl('add'))) openTutorial('association');
+    const inEditor = location.pathname === '/web/player/index.html' && window.parent !== window;
+    if (inEditor) {
+      tryOpenTutorial('association');
       return;
     }
-    if(window.top!==window.self)return;
-    const visible=host=>host && getComputedStyle(host).display!=='none';
-    const library=document.getElementById('biliclip-video-picker');
-    const workbench=document.getElementById('biliclip-upload-panel');
-    const frames=creatorEditorFrames();
-    if(frames.some(({frame})=>creatorElementVisible(frame))) {
-      if(unseen('library') && visible(library) && frames.some(({frame})=>openEditorFrames.has(frame) && !guidedEditorFrames.has(frame)) && !unseen('association')) openTutorial('library');
-      return;
-    }
-    if(unseen('workbench') && visible(workbench)) {openTutorial('workbench');return;}
-    if(unseen('card') && isMember && tutorialCardEntry()) {openTutorial('card');return;}
-    if(unseen('copy') && !isMember) {
+    if (window.top !== window.self) return;
+
+    if (!isMember) {
+      if (tutorialSeen('copy')) return;
       pinHomeGuideCover();
-      if(tutorialSteps('copy')[0].target())openTutorial('copy');
+      if (!tryOpenTutorial('copy')) releaseHomeGuideCover();
+      return;
     }
+
+    const visible = host => host && getComputedStyle(host).display !== 'none';
+    const library = document.getElementById('biliclip-video-picker');
+    const workbench = document.getElementById('biliclip-upload-panel');
+    const frames = creatorEditorFrames().filter(({frame}) => creatorElementVisible(frame));
+    if (frames.length || findCreatorFields()) {
+      const fieldsReady = frames.length
+        ? frames.some(({frame}) => openEditorFrames.has(frame) && !guidedEditorFrames.has(frame))
+        : true;
+      if (fieldsReady && visible(library)) tryOpenTutorial('library');
+      return;
+    }
+    if (visible(workbench) && tryOpenTutorial('workbench')) return;
+    tryOpenTutorial('card');
+  }
+
+  function tryOpenTutorial(scene) {
+    if (tutorialSeen(scene)) return false;
+    const first = tutorialSteps(scene)[0];
+    const target = first?.target?.();
+    if (!target?.isConnected) return false;
+    if (scene !== 'copy' && !tutorialVisibleRect(target)) tutorialRevealTarget(target);
+    if (!tutorialVisibleRect(target)) return false;
+    openTutorial(scene);
+    return true;
   }
 
   function tutorialCardEntry() {
@@ -280,6 +297,9 @@
       ];
     }
     if (scene === 'library') return [
+      ...(document.getElementById('biliclip-video-picker')?.hasAttribute('data-collapsed')
+        ? [step('展开关联视频库','点击这个按钮，展开关联视频库。',library('.tab'),'click')]
+        : []),
       step('查看我的视频','点击「我的视频」，显示可关联的视频列表。',library('#videos'),'click'),
       step('填入 BV 和标题','点击这条视频右侧的「填入」，同时填写关联 BV 和描述。',library('#list .actions button[title="填入 BV + 标题"]'),'fill'),
       step('检查后提交组件','确认 BV 和描述正确，再手动提交 B 站组件。',library('#status'))
@@ -421,22 +441,36 @@
         if(completed&&/失败|未完成|未找到|请先|未填入|错误/.test(status)){completed=false;get('.status').textContent='未完成，请重试';}
       }
       if(step.action==='layout'&&r&&initialRect)completed=Math.abs(r.left-initialRect.left)+Math.abs(r.top-initialRect.top)+Math.abs(r.width-initialRect.width)+Math.abs(r.height-initialRect.height)>5;
-      get('#next').hidden=false; get('#prev').disabled=index===0;
-      get('#next').textContent=index===steps.length-1?'完成':'下一步';
       get('.status').textContent=completed?'✓':!r&&step.target?'等待页面就绪':actionSeen&&['execute','refresh'].includes(step.action)?'处理中…':'';
       if(completed){if(!due)due=now+350;if(now>=due)advance();}else due=0;
     };
     const render=()=>{
       actionSeen=false;completed=false;busySeen=false;lastTarget=null;initialRect=null;due=0;pairBefore=pair;
-      if(steps[index].action==='association') expandCreatorMoreSettings(true,true);
+      const step = steps[index];
+      const last = index === steps.length - 1;
+      if(step.action==='association') expandCreatorMoreSettings(true,true);
+      get('#next').hidden = step.action !== 'read' && step.action !== 'choice';
+      get('#next').textContent = last ? '完成' : '下一步';
+      get('#prev').disabled = index === 0;
       get('.count').textContent='喵贴 · '+(index+1)+' / '+steps.length;
-      get('h2').textContent=steps[index].title;get('#text').textContent=steps[index].text;update();
+      get('h2').textContent = step.title;
+      get('#text').textContent = step.text + (last && step.action === 'read' ? ' 点击任意位置完成引导。' : '');
+      update();
     };
     const close=()=>{if(scene==='copy')releaseHomeGuideCover();if(frame)window.cancelAnimationFrame?.(frame);disposed=true;clearInterval(timer);for(const name of ['click','change','input'])document.removeEventListener(name,observe,true);document.removeEventListener('keydown',escape,true);host.remove();if(previous?.isConnected)previous.focus();};
     const advance=()=>{if(index===steps.length-1){close();}else{index++;render();}};
     const observe=event=>{
-      const t=target(),path=event.composedPath();if(!t||!path.includes(t)||path.includes(host))return;
-      const action=steps[index].action;
+      const action = steps[index].action;
+      const path = event.composedPath();
+      if (event.type === 'click' && action === 'read' && index === steps.length - 1 &&
+          !['#close', '#skip', '#prev', '#next'].some(selector => path.includes(get(selector)))) {
+        // Dismiss the guide without also activating any control underneath.
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        close();
+        return;
+      }
+      const t=target();if(!t||!path.includes(t)||path.includes(host))return;
       if(action==='input'&&event.type==='input'){actionSeen=true;editedAt=Date.now();}
       if(['execute','refresh','fill'].includes(action)&&event.type==='click')actionSeen=true;
       if(action==='choice'&&event.type==='change')completed=true;
@@ -444,7 +478,7 @@
       // Let the original click/change handlers apply their changes before moving the spotlight.
     };
     const escape=event=>{if(event.key==='Escape')close();};
-    get('#close').onclick=close;get('#skip').onclick=close;get('#prev').onclick=()=>{if(index>0){index--;render();}};get('#next').onclick=advance;
+    get('#close').onclick=close;get('#skip').onclick=close;get('#prev').onclick=()=>{if(index>0){index--;render();}};get('#next').onclick=()=>{if(!get('#next').hidden) advance();};
     document.body.append(host);if(typeof host.showPopover==='function')host.showPopover();
     // A refresh or closing a tab also ends this automatic showing.
     GM_setValue(TUTORIAL_SEEN_PREFIX + scene, true);
