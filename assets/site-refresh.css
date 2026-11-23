@@ -29,3 +29,6 @@ body.page-welcome{background:#f8fafc}.page-welcome .topbar{max-width:1160px;padd
 
 .browser-tabs [data-install-browser="cent"] img{width:42px;height:42px;object-fit:cover;object-position:left}
 @media(max-width:600px){.browser-tabs [data-install-browser="cent"] img{width:36px;height:36px}}
+/* Match the perceived size of application icons with generous built-in padding. */
+.browser-tabs [data-install-browser="dia"] img,.browser-tabs [data-install-browser="comet"] img{width:48px;height:48px;object-fit:contain}
+@media(max-width:600px){.browser-tabs [data-install-browser="dia"] img,.browser-tabs [data-install-browser="comet"] img{width:42px;height:42px}}
