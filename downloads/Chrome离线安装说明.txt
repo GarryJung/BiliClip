@@ -1,0 +1,23 @@
+喵贴 BiliClip 8.2.1 · Chrome 离线安装版（候选）
+
+1. 将 ZIP 完整解压到准备长期保留的文件夹。
+2. 在 Chrome 地址栏输入 chrome://extensions 并回车。
+3. 打开右上角“开发者模式”。
+4. 点击“加载已解压的扩展程序”，选择内含 manifest.json 的 biliclip 文件夹。
+5. 关闭其他喵贴扩展或油猴脚本，刷新已打开的 B 站页面。
+6. 点击浏览器拼图图标，可将喵贴固定到工具栏。
+
+不要把 ZIP 直接拖到扩展管理页；应先解压后选择 biliclip 文件夹。
+不要删除安装目录，Chrome 从该目录读取扩展。
+离线版无需脚本管理器；运行 B 站功能仍需联网，视频库等功能需登录 B 站。
+离线版不通过商店自动更新。更新时退出相关页面，以新文件覆盖同一目录，
+在扩展管理页面点击喵贴的重新加载，再刷新 B 站。保留目录路径以维持本地扩展身份。
+卸载会清除扩展存储，卸载前请自行记录需要保留的预设。
+
+此包为本地开发者模式安装包，尚未完成四浏览器真实环境测试，未获商店审核。
+Chrome 如由组织管理并限制开发者模式，请联系管理员；本包不修改安全策略。
+
+官网：https://bv.lcat.cc/
+隐私：https://bv.lcat.cc/privacy.html
+反馈：https://github.com/GarryJung/BiliClip/issues
+安装依据：https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked

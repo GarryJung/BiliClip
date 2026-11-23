@@ -1,0 +1,20 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const source=fs.readFileSync(require('node:path').join(__dirname,'../versions/8.0.1/biliclip-8.0.1.user.js'),'utf8');
+function extract(name){const start=source.search(new RegExp('  (?:async )?function '+name+'\\('));assert.ok(start>=0);const rest=source.slice(start),end=rest.slice(1).search(/\n  (?:async )?function /);return rest.slice(0,end+1);}
+const store=new Map([['biliclip_short_guide_v1_workbench',true],['biliclip_short_guide_v1_library',true]]),hosts=new Map(),opened=[];
+const window={};window.top=window.self=window;window.parent=window;
+const target={};const panel={hasAttribute:()=>false,shadowRoot:{querySelector:selector=>({selector})}};
+let frames=[],editorFields=null;
+const ctx=vm.createContext({ensureTutorialRevision(){},window,location:{pathname:'/platform/upload/video/frame'},document:{getElementById:id=>hosts.get(id)},isBili:true,isMember:true,GM_getValue:(k,d)=>store.get(k)??d,getComputedStyle:()=>({display:'block'}),creatorEditorFrames:()=>frames,creatorElementVisible:()=>true,openEditorFrames:new WeakSet(),openTutorial:scene=>opened.push(scene),tutorialCardEntry:()=>target,findCreatorFields:()=>editorFields,associationGuideControl:kind=>({kind})});
+vm.runInContext(extract('startTutorialOnce')+'\n'+extract('tutorialSteps')+'\n'+extract('uploadSettings'),ctx);
+hosts.set('biliclip-upload-panel',panel);ctx.startTutorialOnce();assert.equal(opened.pop(),'workbench','old seen marker does not suppress revised workbench guide');
+store.set('biliclip_button_guide_v3_workbench',true);ctx.startTutorialOnce();assert.equal(opened.pop(),'card','card-entry button receives separate contextual guide');
+const frame={};frames=[{frame}];hosts.set('biliclip-video-picker',panel);ctx.startTutorialOnce();assert.equal(opened.length,0,'parent waits while iframe guide is active');
+ctx.openEditorFrames.add(frame);store.set('biliclip_button_guide_v3_association',true);ctx.startTutorialOnce();assert.equal(opened.pop(),'library','ready fields hand off to fill-button guide');
+window.parent={};ctx.location.pathname='/web/player/index.html';store.delete('biliclip_button_guide_v3_association');ctx.startTutorialOnce();assert.equal(opened.pop(),'association','cross-origin editor runs its own button guide');
+const steps=ctx.tutorialSteps('association');assert.equal(steps.length,2);assert.equal(steps[0].action,'association-tab');assert.equal(steps[1].action,'fields');assert.equal(steps[1].target().kind,'add');
+const library=ctx.tutorialSteps('library');assert.equal(library[1].action,'fill');assert.ok(library[1].target().selector.includes('填入 BV + 标题'),'target is the actual fill button');
+const copy=ctx.tutorialSteps('copy');assert.equal(copy.length,1,'no cross-page informational slides on home page');assert.ok(copy[0].target);
+assert.equal(ctx.uploadSettings({autoSecondLine:true,secondLine:'预设'}).autoSecondLine,false,'old enabled auto-fill preference is disabled');
+assert.ok(!source.includes('id="auto"'));assert.ok(!source.includes('name="auto"'));assert.ok(!source.includes('function autoFillSecondLine('));
+console.log('Button guides passed: legacy marker migration, workbench/card/iframe/library handoff, exact add/fill targets, copy-only guide, disabled description auto-fill');

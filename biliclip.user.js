@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         BiliClip 喵贴  B站一键填充BV码和标题
+// @name         BiliClip 喵贴 · B站投稿助手
 // @namespace    https://www.bilibili.com/
-// @version      8.1.3
-// @description  复制B站视频BV码和标题，在创作中心按一次粘贴自动填入两个输入框。
+// @version      8.2.1
+// @description  标题填入、简介多选预设、标签预设与关联视频填充，让 B 站投稿少一点重复。
 // @author       Garry Jung
 // @match        http://*/*
 // @match        https://*/*
@@ -18,6 +18,55 @@
 
 (function () {
   'use strict';
+
+  const NATIVE_UI_CSS = `
+        /* 8.2.0 · shared Bilibili surfaces */
+        :host{--bc-text:#18191c;--bc-secondary:#61666d;--bc-border:#e3e5e7;--bc-soft:#f1f2f3;--bc-link:#0078a3;color-scheme:light}
+        button,input,summary{box-sizing:border-box}
+        button,summary{min-height:28px;border-radius:6px}
+        button:focus-visible,input:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid #0078a3;outline-offset:2px}
+        .panel,aside,.card,.declaration-menu{border-color:var(--bc-border);border-radius:8px;box-shadow:0 4px 18px #18191c14}
+        .hint,.foot,.status,.meta,.bv{color:var(--bc-secondary);font-size:12px}
+        input[type=text],input[type=search]{border-color:var(--bc-border);border-radius:6px;background:white;min-height:32px}
+        header{border-color:var(--bc-border)}
+        .panel-logo{width:20px;height:20px;vertical-align:-5px;margin-right:6px}
+        .section-title{margin:8px 0;padding:4px 8px;background:var(--bc-soft);font-size:13px;font-weight:600;border-radius:4px}
+        .panel .primary{background:#00aeec;color:#fff}
+        .settings summary{background:var(--bc-soft);padding:7px 8px;color:var(--bc-text);font-size:12px}
+        .preset{color:var(--bc-text)}
+        .preset .entry{border-color:var(--bc-border);border-radius:6px}
+        .preset input,.preset button{color:var(--bc-link)}
+        .preset button{border-color:var(--bc-border)}
+        .preset button:hover:not(:disabled){background:#e5f6fc;border-color:#00aeec}
+        .preset .chip{background:#e5f6fc;color:var(--bc-link)}
+        .toast{box-sizing:border-box;white-space:normal;overflow-wrap:anywhere;border-radius:6px;background:#fff;box-shadow:0 4px 16px #18191c1a;max-height:calc(100dvh - 32px);overflow:auto}
+        .toast{pointer-events:none;align-items:center;gap:8px}
+        .toast .panel-logo{width:22px;height:22px;margin:0;flex:none}
+        .toast .toast-message{flex:1;min-width:0}
+        .toast .toast-icon{width:16px;height:16px;flex:none;color:#218744}
+        .toast.pink .toast-icon{color:#b82d58}
+        .hover-actions .action-button{border-radius:6px;box-shadow:0 2px 8px #18191c26}
+        .bar .copy-icon{color:var(--bc-secondary)}
+        .ring{border:2px solid white;border-radius:6px;box-shadow:0 0 0 3px #00aeec80}
+        .card .top{border-bottom:1px solid var(--bc-border);padding-bottom:8px;margin-bottom:10px}
+        .guide-brand{display:flex;align-items:center;white-space:nowrap;font-weight:600;color:var(--bc-text)}
+        .guide-brand .panel-logo{width:24px;height:24px}
+        .card .top .count{margin-left:auto;font-size:12px;color:var(--bc-secondary)}
+        .card .bottom{margin-top:10px;gap:8px}
+        .card button{border:1px solid var(--bc-border);min-height:30px}
+        .card button.primary{background:#00aeec;color:#fff}
+        @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+  `;
+
+  const VIDEO_ACTION_COLORS = ':host{--biliclip-video-blue:#00aeec;--biliclip-video-pink:#fb7299}';
+
+  const ACTION_FEEDBACK_CSS = `
+    .action-button{display:inline-grid;place-items:center}
+    .action-label,.action-feedback{grid-area:1/1}
+    .action-feedback{display:flex;justify-content:center;width:0;white-space:nowrap}
+    .action-button[data-feedback] .action-label{visibility:hidden}
+  `;
+  const actionFeedbackTimers = new WeakMap();
 
   const KEY = 'biliclip_pair_v72';
   const TUTORIAL_SEEN_PREFIX = 'biliclip_spotlight_seen_';
@@ -38,6 +87,7 @@
   const MAX_TAG_PRESETS = 10;
   const MAX_PRESET_TAGS = 10;
   let tagPresetRow;
+  let descriptionPresetRow;
   let clearTagsBar;
   let uploadTagsBusy = false;
   const UPLOAD_KEY = 'biliclip_upload_settings_v1';
@@ -50,31 +100,9 @@
   const isMember =
     /(^|\.)member\.bilibili\.com$/i.test(location.hostname);
 
-  let pair = validPair(
-    GM_getValue(KEY, null)
-  );
-
-  let step = 0;
   let ui = null;
-  let writingClipboard = false;
-  let reminderKey = '';
   let creatorFields = null;
   let fillingCreator = false;
-
-  GM_addValueChangeListener(
-    KEY,
-    (_key, _old, value) => {
-      pair = validPair(value);
-      step = 0;
-
-      if (pair) {
-        setTimeout(
-          checkReminder,
-          500
-        );
-      }
-    }
-  );
 
   document.addEventListener(
     'paste',
@@ -85,53 +113,24 @@
   // 在 paste 时核对实际剪贴板内容。删除、剪切或按快捷键本身
   // 不应提前丢弃配对，否则无法在清空表单后重新填充。
 
+  const openMiaotiePage = path => window.open('https://bv.lcat.cc/' + path, '_blank', 'noopener,noreferrer');
+  GM_registerMenuCommand('喵贴官网', () => openMiaotiePage(''));
+  GM_registerMenuCommand('使用教程', () => openMiaotiePage('tutorial.html'));
+  if (isBili) GM_registerMenuCommand('引导教程', () => ready(replayTutorial));
+  GM_registerMenuCommand('检查更新', () => openMiaotiePage('changelog.html'));
+  GM_registerMenuCommand('关于作者', () => openMiaotiePage('author.html'));
   if (isBili) {
-    GM_registerMenuCommand('喵贴 · 重新开始引导', () => ready(replayTutorial));
     GM_registerMenuCommand('喵贴 · 上传简介设置', () => ready(openUploadSettings));
-    GM_registerMenuCommand('喵贴 · 标题填入简介第一行（含第二行预设）', () => ready(() => fillUploadDescription(true)));
-    GM_registerMenuCommand('喵贴 · 填入简介第二行预设', () => ready(() => fillUploadDescription(false)));
+    GM_registerMenuCommand('喵贴 · 标题填入简介首行并追加所选预设', () => ready(() => fillUploadDescription(true)));
+    GM_registerMenuCommand('喵贴 · 追加所选简介预设', () => ready(() => fillUploadDescription(false)));
   }
-  GM_addValueChangeListener(UPLOAD_KEY, (_key, _old, value) => {
-    uploadPrefs = uploadSettings(value);
-    autoFilledDescriptions = new WeakSet();
-  });
-
-  ready(() => {
-    setTimeout(startTutorialOnce, 0);
-    if (isMember) {
-      syncTagPreset();
-      syncUploadPanel();
-      syncVideoPicker();
-      syncCreatorPanelContext();
-      setInterval(() => {
-        syncTagPreset();
-        syncUploadPanel();
-        syncVideoPicker();
-        syncCreatorPanelContext();
-        startTutorialOnce();
-        if (panelExecuting || declarationPending) return;
-        if (!declarationBusy && autoKnowledge) applyKnowledge(true);
-        if (!knowledgeBusy && declarationPrefs.auto) applyDeclaration(true);
-      }, 1200);
-    }
-    if (pair) {
-      checkReminder();
-    }
-
-    if (isBili && !isMember && location.pathname !== '/web/player/index.html') {
-      createBiliUI();
-
-      setInterval(
-        () => { createBiliUI(); startTutorialOnce(); },
-        1500
-      );
-    }
-  });
-
-  setInterval(
-    checkReminder,
-    1000
-  );
+  if (typeof GM_addValueChangeListener === 'function') {
+    GM_addValueChangeListener(UPLOAD_KEY, (_key, _old, value) => {
+      uploadPrefs = uploadSettings(value);
+      autoFilledDescriptions = new WeakSet();
+      syncPanelDescriptionPresets();
+    });
+  }
 
   function ready(callback) {
     if (
@@ -165,14 +164,21 @@
   }
 
   function pinHomeGuideCover() {
-    if (!ui || location.pathname !== '/') return null;
-    if (ui.tutorialCover) return ui.tutorialCover;
+    if (!ui || !/^\/(?:index\.html)?$/.test(location.pathname)) return null;
+    if (ui.tutorialCover?.isConnected && !excludedVideoSurface(ui.tutorialCover)) {
+      const cover = ui.tutorialCover;
+      // Other hover handlers may have cleared active while the guide kept its pin.
+      if (ui.active?.cover !== cover) ui.active = {cover,bv:getBV(cover.href),title:cardTitle(cover)};
+      positionHover();
+      return cover;
+    }
+    ui.tutorialCover = null;
     const preferred=[...document.querySelectorAll('.bili-video-card a[href]')];
     const anchors=preferred.length ? preferred : [...document.querySelectorAll('a[href]')];
     const seen=new Set();
     const candidates=anchors.filter(anchor=>{
       const bv=getBV(anchor.href),r=anchor.getBoundingClientRect();
-      if(!bv || seen.has(bv) || !anchor.querySelector('img,picture,video') || !tutorialVisibleRect(anchor) ||
+      if(!bv || seen.has(bv) || excludedVideoSurface(anchor) || !anchor.querySelector('img,picture,video') || !tutorialVisibleRect(anchor) ||
         r.width<100 || r.height<60 || r.top<80 || r.bottom>window.innerHeight) return false;
       seen.add(bv);return true;
     });
@@ -183,27 +189,37 @@
     const cover=row[Math.floor(row.length/2)];
     ui.tutorialCover=cover;
     ui.active={cover,bv:getBV(cover.href),title:cardTitle(cover)};
-    ui.hoverText.textContent='复制 BV + 标题';ui.hover.disabled=false;ui.hover.style.display='flex';
+    ui.hoverActions.style.display='flex';
     positionHover();return cover;
   }
 
   function releaseHomeGuideCover() {
     if(!ui?.tutorialCover)return;
-    ui.tutorialCover=null;ui.active=null;ui.hover.style.display='none';
+    ui.tutorialCover=null;ui.active=null;ui.hoverActions.style.display='none';
+  }
+
+  function tutorialKey(scene) {
+    return TUTORIAL_SEEN_PREFIX + scene + (['card','association'].includes(scene) ? '_v2' : '');
   }
 
   function tutorialSeen(scene) {
-    const key = TUTORIAL_SEEN_PREFIX + scene;
+    const key = tutorialKey(scene);
+    if (document.documentElement?.hasAttribute('data-biliclip-guide-' + scene)) return true;
+    try { if (sessionStorage.getItem(key) === 'true') return true; } catch (_) {}
     const seen = GM_getValue(key, null);
     if (seen !== null) return seen;
-    const legacySeen = GM_getValue('biliclip_button_guide_v3_' + scene, false);
+    const legacySeen = scene === 'association' ? false : GM_getValue('biliclip_button_guide_v3_' + scene, false);
     GM_setValue(key, legacySeen);
     return legacySeen;
   }
 
   function resetTutorialProgress() {
+    GM_setValue('biliclip_editor_tutorial_epoch', Number(GM_getValue('biliclip_editor_tutorial_epoch',0)) + 1);
     for (const scene of ['copy','workbench','card','association','library']) {
+      GM_setValue(tutorialKey(scene), false);
       GM_setValue(TUTORIAL_SEEN_PREFIX + scene, false);
+      document.documentElement?.removeAttribute('data-biliclip-guide-' + scene);
+      try { sessionStorage.removeItem(tutorialKey(scene)); sessionStorage.removeItem(TUTORIAL_SEEN_PREFIX + scene); } catch (_) {}
     }
   }
 
@@ -214,10 +230,28 @@
     startTutorialOnce();
   }
 
+  let editorTutorialEpoch;
+  function syncEditorTutorialEpoch() {
+    const epoch = String(GM_getValue('biliclip_editor_tutorial_epoch', 0));
+    if (editorTutorialEpoch === undefined) {
+      try { editorTutorialEpoch = sessionStorage.getItem('biliclip_editor_tutorial_epoch') || '0'; }
+      catch (_) { editorTutorialEpoch = '0'; }
+    }
+    if (editorTutorialEpoch === epoch) return;
+    document.getElementById('biliclip-walkthrough')?.shadowRoot?.querySelector('#close')?.click();
+    document.documentElement?.removeAttribute('data-biliclip-guide-association');
+    try {
+      sessionStorage.removeItem(tutorialKey('association'));
+      sessionStorage.setItem('biliclip_editor_tutorial_epoch', epoch);
+    } catch (_) {}
+    editorTutorialEpoch = epoch;
+  }
+
   function startTutorialOnce() {
     if (!isBili || document.getElementById('biliclip-walkthrough')) return;
     const inEditor = location.pathname === '/web/player/index.html' && window.parent !== window;
     if (inEditor) {
+      syncEditorTutorialEpoch();
       tryOpenTutorial('association');
       return;
     }
@@ -242,6 +276,7 @@
       return;
     }
     if (visible(workbench) && tryOpenTutorial('workbench')) return;
+    if (!tutorialSeen('card')) expandCreatorMoreSettings(true, true);
     tryOpenTutorial('card');
   }
 
@@ -259,8 +294,10 @@
   function tutorialCardEntry() {
     const editor = creatorEditorFrames().map(entry => entry.frame).find(creatorElementVisible);
     if (editor) return editor;
-    return uploadQueryAll('button, [role="button"], a, span').find(e =>
-      /^(?:[+＋]\s*)?个性化卡片$/.test(clean(e.textContent)) && creatorElementVisible(e))?.closest('button, [role="button"], a') || uploadQueryAll('button, [role="button"]').find(e => /个性化卡片/.test(clean(e.textContent)) && clean(e.textContent).length < 30 && creatorElementVisible(e));
+    const leaf = uploadQueryAll('button, [role="button"], a, span, div').find(e =>
+      /^(?:[+＋]\s*)?个性化卡片$/.test(clean(e.textContent)) && creatorElementVisible(e) &&
+      ![...e.children].some(child => /个性化卡片/.test(clean(child.textContent))));
+    return leaf?.closest('button, [role="button"], a, label') || leaf || null;
   }
 
   function tutorialLayoutTarget() {
@@ -268,7 +305,7 @@
     const library = document.getElementById('biliclip-video-picker');
     const workbench = document.getElementById('biliclip-upload-panel');
     const host = library || workbench;
-    return host?.shadowRoot?.querySelector(library ? '.resize-se' : 'header');
+    return host?.shadowRoot?.querySelector(library ? '.resize-sw' : 'header');
   }
 
   function tutorialSteps(scene = 'copy') {
@@ -280,42 +317,59 @@
       const host=document.getElementById('biliclip-upload-panel');
       const expand=host?.hasAttribute('data-collapsed') ? [step('展开工作台','点击这个标签，展开投稿设置。',panel('.tab'),'click')] : [];
       return [...expand,
-        step('填写简介第二行','在这里输入常用文案；保存不会修改简介，点击执行才会填入。',panel('#preset'),'choice'),
-        step('应用投稿预设','确认选项后点击「一键执行」，填写简介并应用所选设置。',panel('#execute'),'execute'),
-        step('检查执行结果','这里会显示执行结果；确认后再手动投稿。',panel('.status')),
-        ...(tagPresetRow?.isConnected ? [step('喵贴·标签预设',
-          '输入标签后按回车保存，每条最多 10 个。点 × 删除单个标签，点右侧「执行」追加到投稿标签栏。下方最多可加到 10 条预设。',
-          () => tagPresetRow?.shadowRoot?.querySelector('.entry, .add'))] : [])
+        step('放大或缩小面板','按住面板任意边缘或四角拖动，即可放大或缩小；按住顶部标题栏可移动面板。尺寸和位置会自动记住。',panel('.resize-sw')),
+        step('选择简介预设','展开下拉框选择预设，可多选或不选。执行时每条预设追加到简介末尾的新一行。',panel('.description-dropdown summary'),'choice'),
+        step('选择第二行处理方式','勾选「复写第二行」会用所选预设替换第二行，多条预设依次插入，保留后续正文；不勾选则追加到简介末尾。不选预设时不改动第二行。',panel('#overwrite-second-line')),
+        step('应用投稿设置','点击「一键执行」，把选中的设置应用到当前稿件。',panel('#execute'),'execute'),
+        step('核对投稿表单','这里会逐项显示执行结果。回到 B 站表单核对后，再自行投稿。',panel('.status')),
+        ...(tagPresetRow?.isConnected ? [
+          ...(tagPresetRow.shadowRoot?.querySelector('.entry') ? [
+          {...step('输入预设标签','在这组输入框输入标签，按回车保存；每组最多 10 个标签。',
+            () => tagPresetRow?.shadowRoot?.querySelector('.entry .tags') || tagPresetRow?.shadowRoot?.querySelector('.add')), vertical:true},
+          {...step('执行标签预设','点击这颗「执行」，按投稿标签栏剩余名额添加。完成后会显示轻提示，请核对实际标签。',
+            () => tagPresetRow?.shadowRoot?.querySelector('.entry .execute') || tagPresetRow?.shadowRoot?.querySelector('.add')), vertical:true},
+          ] : []),
+          {...step('增加标签预设','在这里增加另一组预设，最多保存 10 组；各组可以单独执行。',
+            () => tagPresetRow?.shadowRoot?.querySelector('.add')), vertical:true}
+        ] : [])
       ];
     }
-    if (scene === 'card') return [step('打开个性化卡片','点击这个按钮，接着添加关联视频。',tutorialCardEntry,'card-open')];
+    if (scene === 'card') return [step('打开个性化卡片','点击高亮的「个性化卡片」，打开组件编辑器。',tutorialCardEntry,'card-open')];
     if (scene === 'association') {
-      if(findCreatorFields()) return [step('关联输入框已打开','接下来到左侧视频库选择视频。',()=>findCreatorFields()?.bv,'fields')];
+      if(findCreatorFields()) return [step('关联输入框已就绪','接下来可在「喵贴 · 关联视频库」选一条稿件填入。',()=>findCreatorFields()?.bv)];
       return [
-        step('选择关联视频','点击这个「关联视频」标签。',()=>associationGuideControl('tab'),'association-tab'),
-        step('添加关联视频','点击「＋ 添加关联视频」，展开 BV 和描述输入框。',()=>associationGuideControl('add'),'fields')
+        step('切换到关联视频','点击高亮的「关联视频」标签。',()=>associationGuideControl('tab'),'association-tab'),
+        step('添加关联视频','点击「＋ 添加关联视频」，打开链接和描述文案输入框。',()=>associationGuideControl('add'),'fields')
       ];
     }
     if (scene === 'library') return [
       ...(document.getElementById('biliclip-video-picker')?.hasAttribute('data-collapsed')
         ? [step('展开关联视频库','点击这个按钮，展开关联视频库。',library('.tab'),'click')]
         : []),
-      step('查看我的视频','点击「我的视频」，显示可关联的视频列表。',library('#videos'),'click'),
-      step('填入 BV 和标题','点击这条视频右侧的「填入」，同时填写关联 BV 和描述。',library('#list .actions button[title="填入 BV + 标题"]'),'fill'),
-      step('检查后提交组件','确认 BV 和描述正确，再手动提交 B 站组件。',library('#status'))
+      step('放大或缩小视频库','按住面板边缘或四角拖动，调整到适合当前窗口的大小；按住标题栏可移动面板。',library('.resize-sw')),
+      step('打开我的视频','点击「我的视频」，查看可以关联的稿件。',library('#videos'),'click'),
+      {
+        ...step('填入关联视频','点击高亮的「填入」，把 BV 和标题分别填到链接和描述文案。',library('#list .actions button[title="填入 BV + 标题"]'),'fill'),
+        fallback: library('#refresh')
+      }
     ];
-    return [step('复制 BV 和标题','点击这个按钮，复制当前视频的 BV 和标题；投稿页会继续引导填入。',() => {
-      const root=document.getElementById('biliclip-ui-host')?.shadowRoot;
-      return [...(root?.querySelectorAll('.bar .primary, .hover') || [])].find(e => tutorialVisibleRect(e));
-    },'copy')];
+    const copyTarget = action => () => {
+      const selector = `button[data-action="${action}"]`;
+      const bar = document.getElementById('biliclip-video-copy-bar')?.shadowRoot;
+      const hover = document.getElementById('biliclip-ui-host')?.shadowRoot;
+      return [bar?.querySelector(selector), hover?.querySelector(selector)].find(e => tutorialVisibleRect(e));
+    };
+    return [
+      step('复制 BV 和标题','点击蓝色按钮，把 BV 和标题一起复制。粘贴到创作中心的关联视频输入框时，喵贴会分别填入两栏。',copyTarget('both'),'copy'),
+      step('复制标题和链接','点击粉红色按钮，把标题和视频链接一起复制，方便在聊天或文档里分享。',copyTarget('title-link'),'copy')
+    ];
   }
 
-
-  function tutorialPlacement(rect, width, height, vw, vh, panel = null) {
+  function tutorialPlacement(rect, width, height, vw, vh, panel = null, vertical = false) {
     const gap=12, pad=12;
     const clamp=(n,min,max)=>Math.max(min,Math.min(n,Math.max(min,max)));
     // Keep workbench tips outside the entire panel, rather than covering its next controls.
-    if (panel) {
+    if (panel && !vertical) {
       const y=clamp(rect.top+(rect.height-height)/2,pad,vh-height-pad);
       if(panel.left-gap-width>=pad) return {left:panel.left-gap-width,top:y,side:'right'};
       if(panel.right+gap+width<=vw-pad) return {left:panel.right+gap,top:y,side:'left'};
@@ -323,6 +377,13 @@
     const x=clamp(rect.left+(rect.width-width)/2,pad,vw-width-pad);
     if(rect.bottom+gap+height<=vh-pad) return {left:x,top:rect.bottom+gap,side:'top'};
     if(rect.top-gap-height>=pad) return {left:x,top:rect.top-gap-height,side:'bottom'};
+    if (vertical) {
+      const below = vh - rect.bottom;
+      const above = rect.top;
+      return below >= above
+        ? {left:x,top:clamp(rect.bottom+gap,pad,vh-height-pad),side:'top'}
+        : {left:x,top:clamp(rect.top-gap-height,pad,vh-height-pad),side:'bottom'};
+    }
     const y=clamp(rect.top+(rect.height-height)/2,pad,vh-height-pad);
     if(rect.right+gap+width<=vw-pad) return {left:rect.right+gap,top:y,side:'left'};
     if(rect.left-gap-width>=pad) return {left:rect.left-gap-width,top:y,side:'right'};
@@ -356,7 +417,7 @@
 
   function tutorialRevealTarget(target) {
     const workbench = target?.getRootNode?.().host;
-    if (workbench?.id === 'biliclip-upload-panel') {
+    if (['biliclip-upload-panel', 'biliclip-video-picker'].includes(workbench?.id)) {
       const body=target.closest?.('.body');
       if (!body) return;
       const rect=target.getBoundingClientRect(),view=body.getBoundingClientRect();
@@ -377,27 +438,119 @@
   }
 
   function openTutorial(scene = 'copy') {
-    if (document.getElementById('biliclip-walkthrough')) return;
+    if (document.getElementById('biliclip-walkthrough') || tutorialSeen(scene)) return;
+    const key = tutorialKey(scene);
+    document.documentElement?.setAttribute('data-biliclip-guide-' + scene, 'true');
+    try { sessionStorage.setItem(key, 'true'); } catch (_) {}
+    GM_setValue(key, true);
     const steps=tutorialSteps(scene);
     let index=0;
     let disposed=false, actionSeen=false, completed=false, lastTarget=null, initialRect=null;
-    let pairBefore=pair, due=0, editedAt=0, busySeen=false;
+    let due=0, editedAt=0, busySeen=false;
+    const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const followAnimations = new Set();
+    let hasLayout = false, finishTimer = 0;
+    const cancelFollow = () => { for (const animation of followAnimations) animation.cancel(); followAnimations.clear(); };
+    const onMotionChange = () => { if (motionPreference.matches) cancelFollow(); };
+    motionPreference.addEventListener?.('change', onMotionChange);
     const previous=document.activeElement;
     const host=document.createElement('div'); host.id='biliclip-walkthrough';
     // manual popover keeps the spotlight above ordinary page layers without making the page inert.
     host.setAttribute('popover','manual');
     host.style.cssText='all:initial;position:fixed;inset:0;width:100vw;height:100dvh;margin:0;padding:0;border:0;background:transparent;overflow:visible;z-index:2147483647;pointer-events:none';
     const root=host.attachShadow({mode:'open'});
-    root.innerHTML=`<style>
-      *{box-sizing:border-box}.probe{position:fixed;left:0;top:0;width:100px;height:100px;pointer-events:none;visibility:hidden}.shade{position:fixed;background:rgba(18,21,28,.66);pointer-events:auto}.ring{position:fixed;border:2px solid #72d6ff;border-radius:7px;pointer-events:none;box-shadow:0 0 0 3px #00aeec22}.card{position:fixed;pointer-events:auto;width:264px;max-width:calc(100vw - 24px);padding:14px 16px;border:1px solid #e6edf3;border-radius:12px;background:#fff;color:#18191c;box-shadow:0 8px 32px #0003;font:13px/1.65 system-ui,"PingFang SC",sans-serif}.top,.bottom{display:flex;align-items:center;justify-content:space-between;gap:12px}.count{color:#9499a0;font-size:11px}h2{font-size:14px;margin:4px 0}p{margin:4px 0 12px}.status{color:#0086b5;font-size:12px;margin:0}button{font:inherit;border:0;background:none;color:#7b838e;padding:3px 0;cursor:pointer}button.primary{color:#0086b5;font-weight:600}button:disabled{opacity:.4;cursor:default}.arrow{position:absolute;width:10px;height:10px;background:#fff;transform:rotate(45deg)}[data-side=top] .arrow{top:-5px;left:var(--arrow-x,50%)}[data-side=bottom] .arrow{bottom:-5px;left:var(--arrow-x,50%)}[data-side=left] .arrow{left:-5px;top:var(--arrow-y,50%)}[data-side=right] .arrow{right:-5px;top:var(--arrow-y,50%)}[data-side=none] .arrow{display:none}:focus-visible{outline:2px solid #00aeec;outline-offset:3px}[hidden]{display:none!important}
-      </style><div class="probe" aria-hidden="true"></div><div class="shade s0"></div><div class="shade s1"></div><div class="shade s2"></div><div class="shade s3"></div><div class="ring"></div><section class="card" role="region" aria-label="喵贴操作引导"><i class="arrow"></i><div class="top"><span class="count"></span><button id="close" aria-label="退出引导">×</button></div><h2></h2><p id="text"></p><div class="bottom"><button id="skip">跳过</button><button id="prev">上一步</button><span class="status" role="status" aria-live="polite"></span><button id="next" class="primary">下一步</button></div></section>`;
+    root.innerHTML = `
+      <style>
+        * { box-sizing:border-box }
+        .probe { position:fixed; top:0; left:0; width:100px; height:100px; pointer-events:none; visibility:hidden }
+        .shade { position:fixed; background:#12151c73; pointer-events:auto }
+        .ring { position:fixed; border:2px solid #35c5ee; border-radius:9px; box-shadow:0 0 0 3px #00aeec30; pointer-events:none }
+        .card { position:fixed; pointer-events:auto; width:300px; max-width:calc(100vw - 24px); padding:12px 14px;
+          border:1px solid #e3e8ef; border-radius:12px; background:#fff; color:#18191c; box-shadow:0 8px 28px #182a4433;
+          font:13px/1.55 system-ui,"PingFang SC",sans-serif; overflow-wrap:anywhere }
+        .top,.bottom { display:flex; align-items:center; justify-content:space-between; gap:8px }
+        .top { color:#61666d; font-size:12px }
+        .count { color:#00799c; font-weight:600 }
+        h2 { margin:3px 0 5px; font-size:16px; line-height:1.35 }
+        p { margin:0 }
+        .status { color:#087b9f; font-size:12px; min-height:19px; margin:7px 0 2px }
+        .status[data-error] { color:#a12650 }
+        .bottom { justify-content:flex-end }
+        button { border:0; border-radius:6px; background:transparent; color:#61666d; padding:4px 7px; font:inherit; cursor:pointer }
+        button:hover { background:#f0f4f7; color:#18191c }
+        button:disabled { opacity:.55; cursor:default }
+        button.primary { color:#006b89; background:#e5f6fc; font-weight:600 }
+        button.primary:hover { background:#d1f0fa }
+        :focus-visible { outline:2px solid #00aeec; outline-offset:2px }
+        .arrow { position:absolute; width:10px; height:10px; background:#fff; transform:rotate(45deg); pointer-events:none }
+        [data-side=top] .arrow { top:-5px; left:var(--arrow-x,50%) }
+        [data-side=bottom] .arrow { bottom:-5px; left:var(--arrow-x,50%) }
+        [data-side=left] .arrow { left:-5px; top:var(--arrow-y,50%) }
+        [data-side=right] .arrow { right:-5px; top:var(--arrow-y,50%) }
+        [data-side=none] .arrow,[hidden] { display:none!important }
+      
+        ${NATIVE_UI_CSS}
+        .card{animation:guide-enter 220ms ease-out both}
+        .guide-brand .panel-logo{animation:none!important;transform:none!important}
+        .jump-cue{position:absolute;left:50%;top:-36px;width:28px;height:28px;margin-left:-14px;color:#00aeec;filter:drop-shadow(0 2px 2px #18191c26);opacity:0}
+        :host([data-phase=waiting][data-interactive]) .jump-cue{opacity:1;animation:cue-hop 650ms ease-in-out 3}
+        .tap-ripple{position:absolute;left:50%;top:50%;width:24px;height:24px;margin:-12px;border:2px solid #00aeec;border-radius:50%;opacity:0}
+        .tap-ripple.play{animation:tap-spread 440ms ease-out}
+        .step-trail{display:flex;align-items:center;gap:6px;margin:0 0 10px;height:16px}
+        .step-dot{width:7px;height:7px;border-radius:50%;background:#e3e5e7}
+        .step-dot[data-current]{width:22px;border-radius:5px;background:#00aeec;animation:step-land 320ms ease-out}
+        .step-dot[data-done]{background:#83d4ec}
+        .guide-burst{position:absolute;width:48px;height:48px;right:-18px;top:-20px;opacity:0;color:#00aeec}
+        :host([data-phase=success]) .guide-burst{animation:success-burst 380ms ease-out}
+        @keyframes cue-hop{0%,100%{transform:translateY(0)}45%{transform:translateY(-7px)}70%{transform:translateY(2px)}}
+        @keyframes tap-spread{0%{opacity:.85;transform:scale(.4)}100%{opacity:0;transform:scale(2.8)}}
+        @keyframes step-land{0%{transform:translateY(-4px) scale(.8)}65%{transform:translateY(1px) scale(1.05)}100%{transform:none}}
+        @keyframes success-burst{0%{opacity:0;transform:scale(.5) rotate(-12deg)}40%{opacity:1}100%{opacity:0;transform:scale(1.3) rotate(8deg)}}
+        .ring::after{content:'';position:absolute;inset:-5px;border:2px solid #00aeec80;border-radius:9px;opacity:0}
+        :host([data-phase=waiting]) .ring::after{animation:target-breathe 900ms ease-in-out 2}
+        .guide-complete{display:none;width:16px;height:16px;margin-left:5px;color:#218744;flex:none}
+        :host([data-phase=success]) .guide-complete{display:block}
+        .guide-complete path{stroke-dasharray:20;stroke-dashoffset:20}
+        :host([data-phase=success]) .guide-complete path{animation:check-draw 220ms ease-out forwards}
+        .status[data-success]{color:#218744}
+        @keyframes guide-enter{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes target-breathe{0%,100%{opacity:0;transform:scale(.98)}50%{opacity:.8;transform:scale(1.035)}}
+        @keyframes check-draw{to{stroke-dashoffset:0}}
+        @media(prefers-reduced-motion:reduce){.card{animation:guide-fade 160ms ease-out!important}.guide-complete path{stroke-dashoffset:0}}
+        @keyframes guide-fade{from{opacity:0}to{opacity:1}}
+        .celebration{display:none;text-align:center;padding:14px 0 4px}
+        .celebration h2{font-size:20px;color:#0078a3;margin:6px 0 10px}
+        .celebration p{color:#61666d;margin:0 0 16px}
+        .celebration .primary{padding:6px 20px}
+        :host([data-finishing]) .card>:not(.top):not(.celebration):not(.confetti){display:none!important}
+        :host([data-finishing]) .celebration{display:block;animation:celebrate-in 240ms ease-out both}
+        :host([data-finishing]) .ring{display:none!important}
+        .confetti{position:absolute;left:50%;top:52px;width:7px;height:11px;background:var(--color);border-radius:2px;pointer-events:none;opacity:0}
+        :host([data-finishing]) .confetti{animation:confetti-pop 1100ms cubic-bezier(.15,.65,.35,1) var(--delay) both}
+        @keyframes celebrate-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+        @keyframes confetti-pop{0%{opacity:0;transform:translate(0,0) rotate(0) scale(.4)}12%{opacity:1}65%{opacity:1;transform:translate(var(--x),var(--y)) rotate(var(--spin))}100%{opacity:0;transform:translate(var(--x),calc(var(--y) + 70px)) rotate(calc(var(--spin) + 90deg))}}
+        @media(prefers-reduced-motion:reduce){.confetti{display:none!important}}
+
+      </style>
+      <div class="probe" aria-hidden="true"></div>
+      <div class="shade s0"></div><div class="shade s1"></div><div class="shade s2"></div><div class="shade s3"></div>
+      <div class="ring" aria-hidden="true"><svg class="jump-cue" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v19m-7-7 7 7 7-7"/></svg><i class="tap-ripple"></i><svg class="guide-burst" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m24 3 0 7m14-1-5 5m12 10h-7M10 9l5 5M3 24h7m28 14-5-5"/></svg></div>
+      <section class="card" role="region" aria-label="喵贴操作引导">
+        <i class="arrow" aria-hidden="true"></i>
+        <div class="top"><span class="guide-brand">${PANEL_LOGO}喵贴小提示<svg class="guide-complete" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m4 10 4 4 8-9"/></svg></span><span class="count"></span><button id="close" aria-label="退出引导">×</button></div>
+        <div class="step-trail" aria-hidden="true"></div><h2></h2><p id="text"></p><p class="status" role="status"></p>
+        <div class="celebration" role="status"><h2>恭喜，视频已填入！</h2><p>核对关联信息后，再自行提交。</p><button id="celebration-close" type="button" class="primary">知道啦</button></div>
+        <div class="bottom"><button id="skip">跳过</button><button id="prev">上一步</button><button id="next" class="primary">下一步</button></div>
+      </section>
+    `;
     const get=s=>root.querySelector(s);
+    get('.step-trail').innerHTML = steps.map(() => '<i class="step-dot"></i>').join('');
     const rectOf=tutorialVisibleRect;
-    const target=()=>{try{return steps[index].target?.()||null;}catch{return null;}};
+    const target=()=>{try{return steps[index].target?.() || steps[index].fallback?.() || null;}catch{return null;}};
     const box=(element,l,t,w,h)=>Object.assign(element.style,{left:l+'px',top:t+'px',width:Math.max(0,w)+'px',height:Math.max(0,h)+'px'});
     const update=()=>{
-      if(disposed)return;
-      if(scene==='copy' && ui?.tutorialCover?.isConnected)positionHover();
+      if(disposed || host.hasAttribute('data-finishing'))return;
+      if(scene==='copy' && /^\/(?:index\.html)?$/.test(location.pathname))pinHomeGuideCover();
       const step=steps[index], t=target(), now=Date.now();
       if(t!==lastTarget && t?.isConnected && step.action!=='copy') tutorialRevealTarget(t);
       const probe=get('.probe').getBoundingClientRect();
@@ -410,7 +563,7 @@
       if(onscreen){
         const l=Math.max(vl,r.left-5),top=Math.max(vt,r.top-5),right=Math.min(vw,r.right+5),bottom=Math.min(vh,r.bottom+5);
         box(shades[0],vl,vt,vw-vl,top-vt);box(shades[1],vl,bottom,vw-vl,vh-bottom);box(shades[2],vl,top,l-vl,bottom-top);box(shades[3],right,top,vw-right,bottom-top);
-        shades.forEach(e=>e.style.pointerEvents='auto');get('.ring').hidden=false;box(get('.ring'),l,top,right-l,bottom-top);
+        shades.forEach(e=>e.style.pointerEvents='none');get('.ring').hidden=false;box(get('.ring'),l,top,right-l,bottom-top);
       }else{
         // Missing/offscreen controls must not block navigation, scrolling or opening the required editor.
         box(shades[0],vl,vt,vw-vl,vh-vt);shades.slice(1).forEach(e=>box(e,0,0,0,0));shades.forEach(e=>e.style.pointerEvents='none');get('.ring').hidden=true;
@@ -421,67 +574,135 @@
       const panelNode=scene==='workbench' ? document.getElementById('biliclip-upload-panel')?.shadowRoot?.querySelector('.panel') : null;
       const panelRect=panelNode ? tutorialLocalRect(panelNode.getBoundingClientRect(),probe) : null;
       const panelBounds=panelRect ? {...panelRect,left:panelRect.left-vl,right:panelRect.right-vl,top:panelRect.top-vt,bottom:panelRect.bottom-vt} : null;
-      const placement=onscreen?tutorialPlacement(relative,cr.width,cr.height,viewport.width,viewport.height,panelBounds):{left:Math.max(12,(viewport.width-cr.width)/2),top:Math.max(12,viewport.height-cr.height-24),side:'none'};
+      const placement=onscreen?tutorialPlacement(relative,cr.width,cr.height,viewport.width,viewport.height,panelBounds,step.vertical):{left:Math.max(12,(viewport.width-cr.width)/2),top:Math.max(12,viewport.height-cr.height-24),side:'none'};
       placement.left+=vl;placement.top+=vt;
       Object.assign(card.style,{left:placement.left+'px',top:placement.top+'px'});card.setAttribute('data-side',placement.side);
       if(r){card.style.setProperty('--arrow-x',Math.max(16,Math.min(cr.width-24,r.left+r.width/2-placement.left))+'px');card.style.setProperty('--arrow-y',Math.max(16,Math.min(cr.height-24,r.top+r.height/2-placement.top))+'px');}
-      if(step.action==='copy')completed=!!pair&&pair!==pairBefore;
-      if(step.action==='card-open')completed=creatorEditorFrames().some(({frame})=>creatorElementVisible(frame));
+      const waitingForVideos = step.action === 'fill' && !!step.fallback && !step.target();
+      const title = waitingForVideos ? '加载可关联稿件' : step.title;
+      const isLastRead = index === steps.length - 1 && step.action === 'read';
+      const text = waitingForVideos
+        ? '列表没有可填入的稿件。点击「刷新」读取稿件，已有稿件出现后可继续填入。'
+        : step.text + (isLastRead ? ' 点击任意位置完成引导。' : '');
+      if (get('h2').textContent !== title) get('h2').textContent = title;
+      if (get('#text').textContent !== text) get('#text').textContent = text;
+      if(step.action==='copy' && actionSeen)completed=t?.dataset?.feedback==='success';
+      if(step.action==='card-open')completed=creatorEditorFrames().some(({frame})=>creatorElementVisible(frame)) || !!associationGuideControl('tab');
       if(step.action==='association-tab')completed=!!associationGuideControl('add') || !!findCreatorFields();
       if(step.action==='fields')completed=!!findCreatorFields();
-      if(step.action==='fill' && actionSeen)completed=/^已填入|^✓/.test(document.getElementById('biliclip-video-picker')?.shadowRoot?.querySelector('#status')?.textContent || '');
+      if(step.action==='fill' && actionSeen && !waitingForVideos)completed=t?.dataset?.feedback==='success';
       if(step.action==='appear')completed=!!r;
       if(step.action==='association')completed=creatorEditorFrames().some(({frame}) => openEditorFrames.has(frame));
       if(step.action==='input')completed=actionSeen&&!!String(t?.value||'').trim()&&now-editedAt>=650;
-      if((step.action==='execute'||step.action==='refresh')&&actionSeen){
-        if(t?.disabled)busySeen=true;
-        const sr=document.getElementById(step.action==='execute'?'biliclip-upload-panel':'biliclip-video-picker')?.shadowRoot;
-        const status=sr?.querySelector(step.action==='execute'?'.status':'#status')?.textContent||'';
-        completed=busySeen&&!t?.disabled&&!panelExecuting&&!declarationPending;
-        if(completed&&/失败|未完成|未找到|请先|未填入|错误/.test(status)){completed=false;get('.status').textContent='未完成，请重试';}
+      if (step.action === 'execute' && actionSeen) completed = t?.dataset?.guideResult === 'success';
+      if (step.action === 'refresh' && actionSeen) {
+        if (t?.disabled) busySeen = true;
+        const status = document.getElementById('biliclip-video-picker')?.shadowRoot?.querySelector('#status')?.textContent || '';
+        completed = busySeen && !t?.disabled && !/失败|未完成|未找到|请先|未填入|错误/.test(status);
       }
       if(step.action==='layout'&&r&&initialRect)completed=Math.abs(r.left-initialRect.left)+Math.abs(r.top-initialRect.top)+Math.abs(r.width-initialRect.width)+Math.abs(r.height-initialRect.height)>5;
-      get('.status').textContent=completed?'✓':!r&&step.target?'等待页面就绪':actionSeen&&['execute','refresh'].includes(step.action)?'处理中…':'';
-      if(completed){if(!due)due=now+350;if(now>=due)advance();}else due=0;
+      const failed = t?.dataset?.feedback === 'error' || (step.action === 'execute' && actionSeen && t?.dataset?.guideResult === 'error');
+      const hint = completed ? '已完成' : failed ? '操作未完成，可检查后重试'
+        : t?.disabled ? '处理中…' : !r && step.target ? '等待操作控件出现'
+        : step.action === 'choice' ? '可沿用当前设置' : step.action === 'read' ? '' : '请操作高亮控件';
+      const status = get('.status');
+      if (status.textContent !== hint) status.textContent = hint;
+      status.toggleAttribute('data-error', failed);
+      status.toggleAttribute('data-success', completed);
+      const phase = completed ? 'success' : failed ? 'error' : 'waiting';
+      if (host.dataset.phase !== phase) host.dataset.phase = phase;
+      if(completed){if(!due)due=now+400;if(now>=due)advance();}else due=0;
     };
     const render=()=>{
-      actionSeen=false;completed=false;busySeen=false;lastTarget=null;initialRect=null;due=0;pairBefore=pair;
+      // FLIP only between steps; scrolling and resizing track the live target directly.
+      const previousRects = hasLayout ? ['.card','.ring'].map(selector => {
+        const element = get(selector);
+        return {element, rect:element.getBoundingClientRect(), hidden:element.hidden};
+      }) : [];
+      cancelFollow();
+      host.dataset.phase = 'entering';
+      actionSeen=false;completed=false;busySeen=false;lastTarget=null;initialRect=null;due=0;
       const step = steps[index];
+      host.toggleAttribute('data-interactive', !['read','choice'].includes(step.action));
+      get('.step-trail').querySelectorAll('.step-dot').forEach((dot,i) => {dot.toggleAttribute('data-current',i===index);dot.toggleAttribute('data-done',i<index);});
       const last = index === steps.length - 1;
       if(step.action==='association') expandCreatorMoreSettings(true,true);
-      get('#next').hidden = step.action !== 'read' && step.action !== 'choice';
-      get('#next').textContent = last ? '完成' : '下一步';
+      get('#next').hidden = false;
+      get('#next').disabled = step.action !== 'read' && step.action !== 'choice';
+      get('#next').textContent = get('#next').disabled ? '等待你操作' : last ? '完成' : '下一步';
       get('#prev').disabled = index === 0;
-      get('.count').textContent='喵贴 · '+(index+1)+' / '+steps.length;
-      get('h2').textContent = step.title;
-      get('#text').textContent = step.text + (last && step.action === 'read' ? ' 点击任意位置完成引导。' : '');
+      get('.count').textContent=({copy:'复制',workbench:'投稿设置',card:'卡片入口',association:'关联编辑',library:'视频库'}[scene] || '操作')+' · '+(index+1)+' / '+steps.length;
       update();
+      if (!motionPreference.matches) for (const {element,rect,hidden} of previousRects) {
+        if (hidden || element.hidden || !rect.width || !rect.height) continue;
+        const next = element.getBoundingClientRect();
+        if (!next.width || !next.height) continue;
+        const scale = element.classList.contains('ring') ? ` scale(${rect.width / next.width},${rect.height / next.height})` : '';
+        const animation = element.animate([
+          {transform:`translate(${rect.left-next.left}px,${rect.top-next.top}px)${scale}`,transformOrigin:'0 0'},
+          {transform:'translate(0,0) scale(1)',transformOrigin:'0 0'}
+        ], {duration:240,easing:'cubic-bezier(.2,.7,.3,1)'});
+        followAnimations.add(animation);
+        animation.onfinish = () => followAnimations.delete(animation);
+      }
+      hasLayout = true;
     };
-    const close=()=>{if(scene==='copy')releaseHomeGuideCover();if(frame)window.cancelAnimationFrame?.(frame);disposed=true;clearInterval(timer);for(const name of ['click','change','input'])document.removeEventListener(name,observe,true);document.removeEventListener('keydown',escape,true);host.remove();if(previous?.isConnected)previous.focus();};
-    const advance=()=>{if(index===steps.length-1){close();}else{index++;render();}};
+    const close=()=>{clearTimeout(finishTimer);cancelFollow();motionPreference.removeEventListener?.('change',onMotionChange);if(scene==='copy')releaseHomeGuideCover();if(frame)window.cancelAnimationFrame?.(frame);disposed=true;clearInterval(timer);for(const name of ['click','change','input'])document.removeEventListener(name,observe,true);document.removeEventListener('keydown',escape,true);host.remove();if(previous?.isConnected)previous.focus();};
+    const completeScene=()=>{
+      close();
+      if(scene==='workbench') {
+        // Continue promptly after completing the tag preset steps, without waiting
+        // for the upload page's periodic scan. A second check covers unfolding controls.
+        setTimeout(startTutorialOnce,160);
+        setTimeout(startTutorialOnce,450);
+      }
+    };
+    const finish=()=>{
+      if(scene!=='library' || steps[index].action!=='fill' || !completed){close();return;}
+      if(host.hasAttribute('data-finishing'))return;
+      cancelFollow();host.setAttribute('data-finishing','');
+      const card=get('.card');
+      get('.count').textContent='引导完成';
+      if (!motionPreference.matches) {
+        const colors=['#00aeec','#fb7299','#ffd166','#71d6ba'];
+        for(let i=0;i<24;i++) {
+          const piece=document.createElement('i');piece.className='confetti';piece.setAttribute('aria-hidden','true');
+          const angle=(i/24)*Math.PI*2, distance=65+(i%4)*18;
+          piece.style.cssText=`--color:${colors[i%4]};--x:${Math.cos(angle)*distance}px;--y:${Math.sin(angle)*distance-25}px;--spin:${(i%2?1:-1)*(120+i*13)}deg;--delay:${i%5*30}ms`;
+          card.append(piece);
+        }
+      }
+      // Position once; the completion card never blocks native page navigation.
+      Object.assign(card.style,{left:Math.max(12,(innerWidth-card.offsetWidth)/2)+'px',top:Math.max(12,(innerHeight-card.offsetHeight)/2)+'px'});card.setAttribute('data-side','none');
+      finishTimer=setTimeout(close,1800);
+    };
+    const advance=()=>{if(scene==='library' && steps[index].action==='fill' && completed){finish();return;}if(index===steps.length-1){completeScene();}else{index++;render();}};
     const observe=event=>{
+      if(host.hasAttribute('data-finishing'))return;
       const action = steps[index].action;
       const path = event.composedPath();
       if (event.type === 'click' && action === 'read' && index === steps.length - 1 &&
           !['#close', '#skip', '#prev', '#next'].some(selector => path.includes(get(selector)))) {
-        // Dismiss the guide without also activating any control underneath.
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        close();
+        // Preserve native navigation when closing an informational step.
+        completeScene();
         return;
       }
       const t=target();if(!t||!path.includes(t)||path.includes(host))return;
+      if(event.type==='click') {const ripple=get('.tap-ripple');ripple.classList.remove('play');void ripple.offsetWidth;ripple.classList.add('play');}
       if(action==='input'&&event.type==='input'){actionSeen=true;editedAt=Date.now();}
-      if(['execute','refresh','fill'].includes(action)&&event.type==='click')actionSeen=true;
+      if(event.type==='click' && (['copy','execute','refresh'].includes(action) || (action==='fill' && t===steps[index].target()))) {
+        actionSeen=true;
+        busySeen=false;
+      }
       if(action==='choice'&&event.type==='change')completed=true;
       if(action==='click'&&event.type==='click'&&path.some(n=>n?.tagName==='BUTTON'||n?.tagName==='INPUT'||n?.tagName==='SUMMARY'||n?.tagName==='LABEL'))completed=true;
       // Let the original click/change handlers apply their changes before moving the spotlight.
     };
     const escape=event=>{if(event.key==='Escape')close();};
-    get('#close').onclick=close;get('#skip').onclick=close;get('#prev').onclick=()=>{if(index>0){index--;render();}};get('#next').onclick=()=>{if(!get('#next').hidden) advance();};
+    get('#celebration-close').onclick=close;get('#close').onclick=close;get('#skip').onclick=close;get('#prev').onclick=()=>{if(index>0){index--;render();}};get('#next').onclick=()=>{if(!get('#next').hidden && !get('#next').disabled) advance();};
     document.body.append(host);if(typeof host.showPopover==='function')host.showPopover();
     // A refresh or closing a tab also ends this automatic showing.
-    GM_setValue(TUTORIAL_SEEN_PREFIX + scene, true);
+    GM_setValue(tutorialKey(scene), true);
     for(const name of ['click','change','input'])document.addEventListener(name,observe,true);document.addEventListener('keydown',escape,true);
     let frame=0;
     const track=()=>{if(disposed)return;update();if(!disposed)frame=window.requestAnimationFrame(track);};
@@ -519,128 +740,57 @@
       : null;
   }
 
-  function savePair(bv, title) {
+  async function savePair(bv, title) {
     const value = {
       bv,
       title: clean(title),
       savedAt: Date.now()
     };
 
+    await writeClipboard(pairClipboardText(value));
     GM_setValue(KEY, value);
+  }
 
-    pair = validPair(value);
-    step = 0;
-
-    writeClipboard(bv);
+  function pairClipboardText({bv, title}) {
+    return `${bv}\n${title}`;
   }
 
   function clearPair() {
-    if (!pair) return;
-
-    pair = null;
-    step = 0;
-
     GM_setValue(KEY, null);
   }
 
-  function writeClipboard(text) {
-    writingClipboard = true;
-
-    try {
-      GM_setClipboard(
-        text,
-        'text'
-      );
-    } catch (_) {
-      navigator.clipboard
-        ?.writeText(text)
-        .catch(() => {});
+  async function writeClipboard(text) {
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return;
+      } catch (_) {}
     }
-
-    setTimeout(() => {
-      writingClipboard = false;
-    }, 200);
+    if (typeof GM_setClipboard !== 'function' || await GM_setClipboard(text, 'text') === false) {
+      throw new Error('剪贴板不可用');
+    }
   }
 
   /* ==================== 粘贴与自动填充 ==================== */
 
   async function onPaste(event) {
-    // 键盘、右键菜单和浏览器菜单均通过同一个 paste 事件处理。
-    if (!isBili || !pair) return;
-    if (event.composedPath().some(node => node?.id === 'biliclip-video-picker' || node?.id === 'biliclip-upload-panel')) return;
+    if (!isBili) return;
+    const inCreatorEditor = location.pathname === '/web/player/index.html' && window.parent !== window;
+    if (!isMember && !inCreatorEditor) return;
 
-    const editor = getEventEditor(event);
-    if (!editor) return;
+    const text = event.clipboardData?.getData('text/plain').replace(/\r\n/g, '\n');
+    if (!text) return;
+    const current = validPair(GM_getValue(KEY, null));
+    if (!current || text !== pairClipboardText(current)) return;
 
-    // 其他页面或程序复制的新内容优先，避免旧配对覆盖普通粘贴。
-    const clipboardText = event.clipboardData?.getData('text/plain');
-    if (
-      clipboardText &&
-      clean(clipboardText) !== pair.bv &&
-      clean(clipboardText) !== pair.title
-    ) {
-      clearPair();
-      return;
-    }
-
-    const fields =
-      findCreatorFields();
-
-    if (fields) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-
-      await fillCreatorPair(pair);
-
-      return;
-    }
-
-    if (isCreatorPage()) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-
-      toast(
-        '请先打开「关联视频」，等两个输入框出现后再粘贴',
-        'pink',
-        2300
-      );
-
-      return;
-    }
-
-    const text =
-      step === 0
-        ? pair.bv
-        : pair.title;
+    const fields = findCreatorFields();
+    if (!fields) return;
+    const path = event.composedPath();
+    if (!path.includes(fields.bv) && !path.includes(fields.title)) return;
 
     event.preventDefault();
     event.stopImmediatePropagation();
-
-    if (
-      !insertAtCursor(
-        editor,
-        text
-      )
-    ) {
-      return;
-    }
-
-    step =
-      step === 0
-        ? 1
-        : 0;
-
-    writeClipboard(
-      step === 0
-        ? pair.bv
-        : pair.title
-    );
-
-    toast(
-      step === 1
-        ? '✓ BV 已粘贴 · 下次标题'
-        : '✓ 标题已粘贴 · 下次 BV'
-    );
+    await fillCreatorPair(current);
   }
 
   function creatorEditorFrames() {
@@ -779,13 +929,11 @@
       if (active.aid !== draft.aid || active.bv !== draft.bv) return false;
     }
     if ((draftBV && draftBV === current.bv) || (draft.aid && draft.aid === current.aid)) {
-      toast('不能把当前稿件关联到自己', 'pink', 2600);
       return false;
     }
     const fields = findCreatorFields();
     if (!fields) {
       if (isMember && await fillCreatorFrame(current)) return true;
-      toast('未找到关联视频输入框：请在个性化卡片中选择「关联视频」并点击「添加关联视频」；更新脚本后请刷新整个页面', 'pink', 5000);
       return false;
     }
     if (fillingCreator) return;
@@ -804,13 +952,7 @@
         editorValue(finalFields.bv) === current.bv &&
         editorValue(finalFields.title) === current.title;
 
-      if (complete) {
-        finalFields.title.focus();
-        // 保留配对；清空后再次粘贴仍同时填充两个字段。
-        toast('✓ 已自动填充「关联视频ID/链接」和「描述文案」', 'blue', 2200);
-      } else {
-        toast('自动填充未完成，请等两个输入框出现后再粘贴', 'pink', 2300);
-      }
+      if (complete) { finalFields.title.focus(); toast('链接与描述已填入', 'blue', 1800); }
       return !!complete;
     } finally {
       fillingCreator = false;
@@ -818,37 +960,6 @@
 
   }
 
-
-  function isCreatorPage() {
-    if (isMember) {
-      return true;
-    }
-
-    const heading =
-      document.querySelector(
-        'h1, [class*="page-title"]'
-      );
-
-    const pageText = clean(
-      `${document.title} ${
-        heading?.textContent || ''
-      }`
-    );
-
-    return /创作中心/.test(pageText);
-  }
-
-  function checkReminder() {
-    if (!pair || !document.body || !isBili) return;
-    const inEditor = location.pathname === '/web/player/index.html' && window.parent !== window;
-    if ((!isMember && !inEditor) || !findCreatorFields()) return;
-    const draft = currentCreatorDraft();
-    if (draft.bv && draft.bv === pair.bv) return;
-    const key = `${pair.savedAt}:${location.href}`;
-    if (key === reminderKey) return;
-    reminderKey = key;
-    toast('关联视频可直接从视频库填入，也可粘贴已复制的 BV + 标题', 'blue', 3200);
-  }
 
   /* ==================== 输入框识别 ==================== */
 
@@ -994,7 +1105,7 @@
       return null;
     }
 
-    // 同一组输入框清空后继续使用，避免标签或提示变化导致退回交替粘贴。
+    // 同一组输入框清空后继续使用，避免标签变化导致识别失败。
     if (
       creatorFields &&
       editors.includes(creatorFields.bv) &&
@@ -1306,46 +1417,6 @@
     return depth;
   }
 
-  function getEventEditor(event) {
-    const path =
-      event.composedPath
-        ? event.composedPath()
-        : [event.target];
-
-    const editors =
-      visibleEditors();
-
-    for (
-      const node of path
-    ) {
-      if (
-        !(node instanceof Element)
-      ) {
-        continue;
-      }
-
-      const editor =
-        node.closest(
-          [
-            'input',
-            'textarea',
-            '[contenteditable="true"]',
-            '[contenteditable=""]',
-            '[role="textbox"]'
-          ].join(',')
-        );
-
-      if (
-        editor &&
-        editors.includes(editor)
-      ) {
-        return editor;
-      }
-    }
-
-    return null;
-  }
-
   function editorValue(editor) {
     return editor instanceof HTMLInputElement || editor instanceof HTMLTextAreaElement
       ? editor.value
@@ -1498,118 +1569,17 @@
     );
   }
 
-  function insertAtCursor(
-    editor,
-    text
-  ) {
-    if (
-      editor instanceof
-        HTMLInputElement ||
-      editor instanceof
-        HTMLTextAreaElement
-    ) {
-      const start =
-        editor.selectionStart ??
-        editor.value.length;
-
-      const end =
-        editor.selectionEnd ??
-        start;
-
-      const value =
-        editor.value.slice(
-          0,
-          start
-        ) +
-        text +
-        editor.value.slice(end);
-
-      nativeValue(
-        editor,
-        value
-      );
-
-      editor.setSelectionRange(
-        start + text.length,
-        start + text.length
-      );
-
-      fireInput(
-        editor,
-        text
-      );
-
-      return true;
-    }
-
-    editor.focus();
-
-    const selection =
-      getSelection();
-
-    if (!selection) {
-      return false;
-    }
-
-    if (
-      !selection.rangeCount ||
-      !editor.contains(
-        selection.anchorNode
-      )
-    ) {
-      const range =
-        document.createRange();
-
-      range.selectNodeContents(
-        editor
-      );
-
-      range.collapse(false);
-
-      selection.removeAllRanges();
-      selection.addRange(range);
-    }
-
-    if (
-      document.execCommand?.(
-        'insertText',
-        false,
-        text
-      )
-    ) {
-      return true;
-    }
-
-    const range =
-      selection.getRangeAt(0);
-
-    range.deleteContents();
-
-    const node =
-      document.createTextNode(text);
-
-    range.insertNode(node);
-    range.setStartAfter(node);
-    range.collapse(true);
-
-    selection.removeAllRanges();
-    selection.addRange(range);
-
-    fireInput(
-      editor,
-      text
-    );
-
-    return true;
-  }
-
   /* ==================== 上传简介与菜单 ==================== */
 
   function uploadSettings(value) {
-    return {
-      secondLine: String(value?.secondLine || '').replace(/[\r\n]+/g, ' ').trim(),
-      autoSecondLine: false
-    };
+    const normalize = text => String(text || '').replace(/[\r\n]+/g, ' ').trim();
+    const presets = Array.isArray(value?.presets) && value.presets.length
+      ? value.presets.slice(0, 10).map(normalize) : [normalize(value?.secondLine)];
+    const selected = Math.max(0, Math.min(presets.length - 1, Math.trunc(Number(value?.selected) || 0)));
+    const selectedIndices = [...new Set(Array.isArray(value?.selectedIndices) ? value.selectedIndices : value ? [selected] : [])]
+      .filter(index => Number.isInteger(index) && index >= 0 && index < presets.length).sort((a,b) => a-b);
+    return {presets, selected: selectedIndices[0] ?? 0, selectedIndices,
+      secondLine: selectedIndices.map(index => presets[index]).filter(Boolean).join('\n'), autoSecondLine: false, overwriteSecondLine: value?.overwriteSecondLine === true};
   }
 
   function isUploadPage() {
@@ -1665,7 +1635,118 @@
     return fallback ? { title, description: fallback } : null;
   }
 
+  function syncPanelDescriptionPresets(root = document.getElementById('biliclip-upload-panel')?.shadowRoot) {
+    const list = root?.querySelector('#preset');
+    if (!list) return;
+    const signature = JSON.stringify(uploadPrefs.presets);
+    if (list.dataset.presets !== signature) {
+      const doc = list.ownerDocument;
+      list.replaceChildren();
+      const clear = doc.createElement('button'); clear.type = 'button'; clear.className = 'preset-clear'; clear.textContent = '不使用简介预设';
+      clear.onclick = () => saveDescriptionPresets(uploadPrefs.presets, []); list.append(clear);
+      uploadPrefs.presets.forEach((text, index) => {
+        const label = doc.createElement('label');label.className = 'toggle description-choice';
+        const checkbox = doc.createElement('input');checkbox.type = 'checkbox';checkbox.value = String(index);
+        const name = doc.createElement('span');name.textContent = `预设${index + 1}`;
+        label.title = text || '此预设暂无内容，请在简介框下方编辑';
+        checkbox.addEventListener('change', () => {
+          const selected = [...list.querySelectorAll('input:checked')].map(input => Number(input.value));
+          saveDescriptionPresets(uploadPrefs.presets, selected);
+        });
+        label.append(checkbox,name);list.append(label);
+      });
+      list.dataset.presets = signature;
+    }
+    for (const checkbox of list.querySelectorAll('input')) checkbox.checked = uploadPrefs.selectedIndices.includes(Number(checkbox.value));
+    const summary = root.querySelector('#preset-summary');
+    if (summary) summary.textContent = uploadPrefs.selectedIndices.length ? uploadPrefs.selectedIndices.map(index => `预设${index+1}`).join('、') : '不使用简介预设';
+  }
+
+  function saveDescriptionPresets(presets, selected) {
+    uploadPrefs = uploadSettings({presets, selectedIndices: Array.isArray(selected) ? selected : [selected]});
+    GM_setValue(UPLOAD_KEY, uploadPrefs);
+    autoFilledDescriptions = new WeakSet();
+    syncPanelDescriptionPresets();
+  }
+
+  function syncDescriptionPresets() {
+    const fields = isUploadPage() && findUploadFields();
+    if (!fields) { descriptionPresetRow?.remove(); return; }
+    const editor = fields.description;
+    const container = editor.closest('.form-item') || editor.closest('.desc-container, .desc-text-wrp, .desc-wrapper') || editor;
+    // Mount as a form-row sibling, never inside the fixed-height rich-text editor.
+    if (!descriptionPresetRow || descriptionPresetRow.ownerDocument !== editor.ownerDocument) {
+      const doc = editor.ownerDocument;
+      const row = doc.createElement('div'); row.id = 'biliclip-description-presets';
+      row.style.cssText = 'display:block;position:relative;clear:both;flex:0 0 100%;width:100%;min-width:0;margin:10px 0 16px';
+      const root = row.attachShadow({mode:'open'});
+      root.innerHTML = `<style>
+        :host{font:14px/1.5 system-ui,sans-serif;color:#ff6699}*{box-sizing:border-box}
+        .preset{display:grid;grid-template-columns:minmax(0,var(--field-offset,146px)) minmax(0,1fr);align-items:start;padding-right:var(--field-end,0px)}
+        .label{padding:8px 6px 0 var(--label-offset,24px);font-weight:400;overflow-wrap:anywhere}
+        .panel-logo{width:20px;height:20px;vertical-align:-5px;margin-right:6px}
+        .entry{display:flex;align-items:center;gap:8px;padding:4px 6px;margin-bottom:8px;min-width:0;min-height:36px;border:1px solid #ff6699;border-radius:4px;background:white}
+        .entry label{white-space:nowrap;font-size:13px}
+        input,button{color:#ff6699;font:14px/1.5 system-ui,sans-serif}
+        input{flex:1;min-width:0;width:0;border:0;padding:3px 6px;background:white;color:#18191c}
+        input::placeholder{color:#9499a0}
+        button{cursor:pointer;border:1px solid #ff6699;background:white;border-radius:4px;padding:3px 9px;white-space:nowrap}
+        button:hover:not(:disabled){background:#fff0f4}button:disabled{opacity:.5;cursor:default}
+        button:focus-visible,input:focus-visible{outline:2px solid #b82d58;outline-offset:2px}
+        p{margin:6px 0 0;color:#61666d;font-size:12px}[role=status]:empty{display:none}
+        @media(max-width:600px){.entry{gap:4px}.entry label{font-size:12px}button{padding:3px 5px}}
+      </style><section class="preset"><span class="label" id="description-label" style="color:#18191c">${PANEL_LOGO}喵贴·简介预设</span><div role="group" aria-labelledby="description-label"><div id="entries"></div><button id="add" type="button">＋ 增加一条预设</button><p>最多 10 条，每条预设追加到简介末尾的新一行。</p><p role="status" id="status"></p></div></section>`;
+      const render = () => {
+        root.querySelector('#entries').replaceChildren();
+        uploadPrefs.presets.forEach((text, index) => {
+          const entry = doc.createElement('div'); entry.className = 'entry';
+          const label = doc.createElement('label'); label.textContent = `预设${index + 1}`;label.htmlFor = `description-preset-${index}`;
+          const input = doc.createElement('input'); input.id = label.htmlFor; input.type = 'text'; input.value = text; input.placeholder = '输入要追加到简介末尾的内容';
+          input.oninput = () => {
+            const presets = [...uploadPrefs.presets];presets[index] = input.value;
+            saveDescriptionPresets(presets, uploadPrefs.selectedIndices);
+          };
+          const apply = doc.createElement('button');apply.type = 'button';apply.textContent = '填入';apply.setAttribute('aria-label', `填入预设${index + 1}`);
+          apply.onclick = () => {
+            saveDescriptionPresets(uploadPrefs.presets, index);
+            const current = findUploadFields();
+            const ok = current && writeDescription(current.description, descriptionLines(descriptionText(current.description), null, uploadPrefs.secondLine, uploadPrefs.overwriteSecondLine));
+            root.querySelector('#status').textContent = ok ? `已追加预设${index + 1}，请核对简介` : '未找到简介框，请刷新后重试';
+            if (ok) toast(`简介预设${index + 1}已追加完成`, 'blue', 1800, null, 'upper-center');
+          };
+          const remove = doc.createElement('button');remove.type = 'button';remove.textContent = '删除';remove.disabled = uploadPrefs.presets.length === 1;remove.setAttribute('aria-label', `删除简介预设${index + 1}`);
+          remove.onclick = () => {
+            const selected = uploadPrefs.selectedIndices.filter(i => i !== index).map(i => i > index ? i-1 : i);
+            const presets = uploadPrefs.presets.filter((_, i) => i !== index);
+            saveDescriptionPresets(presets, selected);render();
+          };
+          entry.append(remove,label,input,apply);root.querySelector('#entries').append(entry);
+        });
+        root.querySelector('#add').disabled = uploadPrefs.presets.length >= 10;
+        row.dataset.version = JSON.stringify(uploadPrefs);
+      };
+      root.querySelector('#add').onclick = () => {
+        if (uploadPrefs.presets.length >= 10) return;
+        saveDescriptionPresets([...uploadPrefs.presets, ''], uploadPrefs.selectedIndices);render();
+        root.querySelector('#entries').lastElementChild.querySelector('input').focus();
+      };
+      row.refresh = render; descriptionPresetRow = row;render();
+    }
+    if (container.nextElementSibling !== descriptionPresetRow) container.after(descriptionPresetRow);
+    const bounds = descriptionPresetRow.getBoundingClientRect();
+    const field = (editor.closest('.ql-container, .desc-text-wrp') || editor).getBoundingClientRect();
+    const label = [...container.querySelectorAll('h3, label, span')].find(node => node.textContent.trim() === '简介');
+    const scale = bounds.width / descriptionPresetRow.offsetWidth || 1;
+    const labelLeft = label?.getBoundingClientRect().left ?? bounds.left + 24 * scale;
+    descriptionPresetRow.style.setProperty('--label-offset', Math.max(0, (labelLeft - bounds.left) / scale) + 'px');
+    descriptionPresetRow.style.setProperty('--field-offset', Math.max(0, (field.left - bounds.left) / scale) + 'px');
+    descriptionPresetRow.style.setProperty('--field-end', Math.max(0, (bounds.right - field.right) / scale) + 'px');
+    const root = descriptionPresetRow.shadowRoot;
+    if (!root.activeElement && descriptionPresetRow.dataset.version !== JSON.stringify(uploadPrefs)) descriptionPresetRow.refresh();
+  }
+
   function syncTagPreset() {
+    syncDescriptionPresets();
     if (isUploadPage()) {
       const { title, description } = findUploadFields() || {};
       const tags = uploadQueryAll(TAG_INPUT_SELECTOR)
@@ -1709,7 +1790,7 @@
         :host { font:14px/1.5 system-ui, sans-serif; }
         .preset { display:grid; grid-template-columns:minmax(0, var(--field-offset, 146px)) minmax(0, 1fr);
           align-items:start; padding-right:var(--field-end, 0px); color:#b82d58; font:14px/1.5 system-ui, sans-serif; }
-        .label { padding:9px 6px 0 var(--label-offset, 24px); overflow-wrap:anywhere; font-weight:600; }
+        .label { padding:9px 6px 0 var(--label-offset, 24px); overflow-wrap:anywhere; font-weight:400; }
         .entry { display:flex; align-items:center; gap:8px; padding:4px 6px;
           margin-bottom:8px; min-height:30px; border:1px solid #fb7299; border-radius:4px; }
         .tags { display:flex; flex:1; min-width:0; flex-wrap:wrap; align-items:center; gap:6px; }
@@ -1724,9 +1805,11 @@
           max-width:100%; overflow-wrap:anywhere; background:#fb7299; color:#3b1020; }
         .remove { color:inherit; background:transparent; border:0; padding:0 3px; }
         [role="status"] { margin-top:4px; font-size:12px; }
+      
+        ${NATIVE_UI_CSS}
       </style>
       <div class="preset">
-        <span class="label" id="preset-label">喵贴·标签预设</span>
+        <span class="label" id="preset-label">${PANEL_LOGO}喵贴·预设标签</span>
         <div role="group" aria-labelledby="preset-label">
           <div class="entries"></div>
           <button class="add" type="button">＋ 增加一条预设</button>
@@ -1743,15 +1826,18 @@
       : [splitTags(typeof saved === 'string' ? saved : '')];
     const persist = () => GM_setValue(TAG_PRESET_KEY, presets);
 
-    async function execute(tags) {
+    async function execute(tags, anchor) {
       const buttons = [...entries.querySelectorAll('.execute, .delete-preset')];
       buttons.forEach(button => { button.disabled = true; });
       add.disabled = true;
       status.textContent = '正在执行…';
       try {
-        await applyTagPreset(row, [...tags], message => { status.textContent = message; });
+        const result = await applyTagPreset(row, [...tags], message => { status.textContent = message; });
+        toast(result?.completed ? `标签预设执行完成，已添加 ${result.added} 个标签` : status.textContent,
+          result?.completed ? 'blue' : 'pink', 2400, anchor);
       } catch (_) {
         status.textContent = '执行中断，请核对标签栏';
+        toast(status.textContent, 'pink', 2400, anchor);
       } finally {
         buttons.forEach(button => { button.disabled = false; });
         add.disabled = presets.length >= MAX_TAG_PRESETS;
@@ -1788,17 +1874,28 @@
         });
       };
       input.addEventListener('keydown', event => {
-        if (event.key !== 'Enter' || event.isComposing || event.keyCode === 229) return;
+        if (event.isComposing || event.keyCode === 229) return;
+        if ((event.key === 'Backspace' || event.key === 'Delete') && input.value === '' && tags.length) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (event.repeat) return;
+          const removed = tags.pop();
+          persist();
+          renderTags();
+          status.textContent = `已删除标签 ${removed}`;
+          return;
+        }
+        if (event.key !== 'Enter') return;
         event.preventDefault();
         event.stopPropagation();
         const tag = input.value.trim();
         if (!tag) return;
         if (tags.includes(tag)) {
-          toast('ⓧΣ( ° △ °|||) 该输入标签已经存在', 'pink', 1800, input);
+          toast('该标签已存在，请输入其他标签', 'pink', 1800, input);
           return;
         }
         if (tags.length >= MAX_PRESET_TAGS) {
-          toast('ⓧ Σ( ° △ °|||) 允许添加的标签已经达到上限了', 'pink', 1800, input);
+          toast('标签已达上限，请先删除不需要的标签', 'pink', 1800, input);
           return;
         }
         tags.push(tag);
@@ -1816,8 +1913,8 @@
         status.textContent = '已删除预设';
       });
       entry.querySelector('.execute').addEventListener('click', () => {
-        if (tags.length) void execute(tags);
-        else status.textContent = '请先输入标签并按回车';
+        if (tags.length) void execute(tags, entry);
+        else { status.textContent = '请先输入标签并按回车'; toast(status.textContent, 'pink', 1800, entry); }
       });
       renderTags();
       entries.append(entry);
@@ -1888,10 +1985,12 @@
       clearTagsBar.style.cssText = 'display:flex;justify-content:flex-end;margin:0 0 4px';
       const root = clearTagsBar.attachShadow({ mode: 'open' });
       root.innerHTML = `<style>
-        button { font:14px/1.5 system-ui,sans-serif; color:#b82d58; background:white;
-          border:1px solid #fb7299; border-radius:4px; padding:3px 9px; cursor:pointer; }
+        button { font:14px/1.5 system-ui,sans-serif; color:#ff6699; background:white;
+          border:1px solid #ff6699; border-radius:4px; padding:3px 9px; cursor:pointer; }
         button:hover:not(:disabled) { background:#fff0f4; }
         button:disabled { opacity:.5; cursor:default; }
+      
+        ${NATIVE_UI_CSS}
       </style><button type="button">删除所有标签</button>`;
       root.querySelector('button').addEventListener('click', () => void clearUploadTags());
     }
@@ -1975,6 +2074,7 @@
       uploadTagsBusy = false;
     }
     report(`已添加 ${submitted} 个标签，请核对标签栏`);
+    return {completed: row.isConnected && isUploadPage(), added: submitted};
   }
 
   function descriptionText(editor) {
@@ -1985,14 +2085,17 @@
       .replace(/\r\n?/g, '\n');
   }
 
-  function descriptionLines(text, title, preset) {
+  function descriptionLines(text, title, preset, overwriteSecondLine = false) {
     const lines = text.split('\n');
     if (title !== null) lines[0] = title;
-    if (preset !== null) {
-      if (!lines.length) lines.push('');
-      lines[1] = preset;
+    const original = lines.join('\n');
+    const additions = (Array.isArray(preset) ? preset : String(preset || '').split('\n')).filter(line => line.trim());
+    if (!additions.length) return original;
+    if (overwriteSecondLine) {
+      lines.splice(1, lines.length > 1 ? 1 : 0, ...additions);
+      return lines.join('\n');
     }
-    return lines.join('\n');
+    return original + (original && !original.endsWith('\n') ? '\n' : '') + additions.join('\n');
   }
 
   function writeDescription(editor, text, automatic = false) {
@@ -2011,14 +2114,14 @@
 
   function fillUploadDescription(withTitle = true) {
     const fields = findUploadFields();
-    if (!fields) return toast(isUploadPage() ? '未识别到简介编辑器，请在视频上传完成、简介框出现后重试（简介直连修复）' : '请先进入 B 站视频上传页（简介直连修复）', 'pink', 3200);
+    if (!fields) return toast(isUploadPage() ? '未找到简介框，请等待视频上传完成后重试' : '请先进入 B 站视频上传页', 'pink', 3200);
     const title = withTitle ? clean(fields.title?.value) : null;
     if (withTitle && !title) return toast('请先填写上传视频的标题', 'pink');
-    if (!withTitle && !uploadPrefs.secondLine) return toast('请先在「上传简介设置」中保存第二行预设', 'pink');
+    if (!withTitle && !uploadPrefs.secondLine) return toast('请先在投稿助手下拉框中选择简介预设', 'pink');
     const preset = uploadPrefs.secondLine || null;
-    const text = descriptionLines(descriptionText(fields.description), title, preset);
+    const text = descriptionLines(descriptionText(fields.description), title, preset, uploadPrefs.overwriteSecondLine);
     const done = writeDescription(fields.description, text);
-    toast(done ? '✓ 简介已填入，请检查后再投稿' : '简介填入未完成，请检查编辑器内容', done ? 'blue' : 'pink', 2600);
+    toast(done ? (withTitle ? (preset ? '标题与所选简介预设已执行完成' : '标题已填入简介首行') : '所选简介预设已追加完成') : '简介填入未完成，请检查编辑器内容', done ? 'blue' : 'pink', 2600, null, 'upper-center');
   }
 
   function openUploadSettings() {
@@ -2031,22 +2134,24 @@
       <style>
         *{box-sizing:border-box}section{width:min(460px,90vw);padding:24px;border-radius:16px;background:white;color:#18191c;font:14px/1.6 system-ui,sans-serif;box-shadow:0 16px 60px #0003}
         h2{margin:0 0 12px;font-size:20px}p{color:#61666d}input[type=text]{width:100%;padding:10px;border:1px solid #ccd0d7;border-radius:8px;margin:8px 0 16px}label{display:block}footer{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}button{border:0;border-radius:8px;padding:9px 16px;cursor:pointer}button[type=submit]{background:#00aeec;color:white}
+      
+        ${NATIVE_UI_CSS}
       </style>
       <section role="dialog" aria-modal="true" aria-labelledby="heading">
         <form><h2 id="heading">喵贴 · 上传简介设置</h2>
-          <p>一键填入会将上传页标题写入简介第一行，并填入已保存的第二行预设。第三行及以后的文字保留。</p>
-          <label>简介第二行预设<input type="text" name="preset" placeholder="例如：关注我，获取更多精彩内容"></label>
+          <p>标题写入简介首行；在投稿助手下拉框中选择预设，执行时每条追加到简介末尾的新一行，原有其余正文保留。</p>
+          <label>编辑简介预设<input type="text" name="preset" placeholder="例如：关注我，获取更多精彩内容"></label>
           <p>仅在点击一键执行或填入菜单时写入简介。</p>
           <footer><button type="button" id="cancel">取消</button><button type="submit">保存设置</button></footer>
         </form>
       </section>`;
     const input = root.querySelector('[name=preset]');
-    input.value = uploadPrefs.secondLine;
+    input.value = uploadPrefs.presets[uploadPrefs.selected] || '';
     root.querySelector('#cancel').onclick = () => host.remove();
     host.addEventListener('keydown', event => { if (event.key === 'Escape') host.remove(); });
     root.querySelector('form').onsubmit = event => {
       event.preventDefault();
-      uploadPrefs = uploadSettings({ secondLine: input.value, autoSecondLine: false });
+      uploadPrefs = uploadSettings({...uploadPrefs, presets: uploadPrefs.presets.map((text, index) => index === uploadPrefs.selected ? input.value : text)});
       GM_setValue(UPLOAD_KEY, uploadPrefs);
       autoFilledDescriptions = new WeakSet();
       host.remove();
@@ -2056,7 +2161,7 @@
     input.focus();
   }
 
-  /* ==================== 8.1.3 上传页右侧悬浮面板 ==================== */
+  /* ==================== 8.2.0 上传页右侧悬浮面板 ==================== */
 
   function clickUploadControl(element) {
     const view = element.ownerDocument.defaultView;
@@ -2326,7 +2431,7 @@
       panel.style.height = Math.min(innerHeight - 88, Math.max(Math.min(220, innerHeight - 88), height)) + 'px';
     };
     fit(Number.isFinite(saved?.width) ? saved.width : Math.min(280, innerWidth - 24),
-      Number.isFinite(saved?.height) ? saved.height : Math.min(side === 'left' ? 500 : 460, innerHeight * .6));
+      Number.isFinite(saved?.height) ? saved.height : Math.max(132, innerHeight - 100));
     panel.style.resize = 'none';
     host.biliclipLayout?.();
     const style = document.createElement('style');
@@ -2338,7 +2443,7 @@
       .resize-n,.resize-s{left:8px;right:8px;height:8px;cursor:ns-resize}.resize-n{top:-4px}.resize-s{bottom:-4px}
       .resize-e,.resize-w{top:8px;bottom:8px;width:8px;cursor:ew-resize}.resize-e{right:-4px}.resize-w{left:-4px}
       .resize-ne,.resize-nw,.resize-se,.resize-sw{width:14px;height:14px}
-      .resize-ne{top:-4px;right:-4px;cursor:nesw-resize}.resize-sw{bottom:-4px;left:-4px;cursor:nesw-resize}
+      .resize-sw:after{content:"";position:absolute;left:4px;bottom:4px;width:8px;height:8px;border-left:2px solid #00aeec;border-bottom:2px solid #00aeec;border-radius:0 0 0 3px}.resize-ne{top:-4px;right:-4px;cursor:nesw-resize}.resize-sw{bottom:-4px;left:-4px;cursor:nesw-resize}
       .resize-nw{top:-4px;left:-4px;cursor:nwse-resize}.resize-se{bottom:-4px;right:-4px;cursor:nwse-resize}
       #list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));align-content:start;gap:0 14px}
       .item{grid-template-columns:64px minmax(0,1fr) auto;grid-template-rows:auto auto auto;align-content:start;gap:3px 8px;padding:10px 0}
@@ -2636,7 +2741,7 @@
       const kind = m?.kind || (m?.season_id ? 'season' : 'series');
       const id = String(m?.id || m?.season_id || m?.series_id || '');
       if (!/^[1-9]\d*$/.test(id) || !['season','series'].includes(kind) || !clean(m?.name || m?.title)) continue;
-      items.set(kind + id, {id,kind,title:clean(m.name || m.title),count:Math.max(0,Number(m.total ?? m.count) || 0)});
+      items.set(kind + id, {id,kind,title:clean(m.name || m.title),cover:pickerCover(m.cover || row.cover),count:Math.max(0,Number(m.total ?? m.count) || 0)});
     }
     return [...items.values()];
   }
@@ -2742,16 +2847,71 @@
         header{position:sticky;top:0;background:#fff;z-index:1;display:flex;align-items:center;justify-content:space-between;padding:12px;border-bottom:1px solid #eef1f5}h2{font-size:14px;margin:0}.body{padding:12px}
         button,input{font:inherit}button{border:0;border-radius:7px;background:#edf7fc;color:#008abc;padding:6px 9px;cursor:pointer}button:disabled{opacity:.5;cursor:wait}input{width:100%;border:1px solid #dce1e8;border-radius:7px;padding:8px;background:white;color:#18191c}
         .tools{display:flex;gap:6px;margin:8px 0}.status,.hint{font-size:11px;color:#61666d;margin:8px 0;overflow-wrap:anywhere}.cover{grid-row:1 / 5;width:76px;height:48px;object-fit:cover;border-radius:6px;background:#f1f4f8}.meta{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;font-size:11px;color:#9499a0;margin:5px 0}.meta svg{width:12px;height:12px;vertical-align:-2px;margin-right:3px}.item{display:grid;grid-template-columns:76px minmax(0,1fr);gap:2px 8px;border-top:1px solid #eef1f5;padding:8px 0}.item>.title,.item>.bv,.item>.meta,.item>.actions{grid-column:2;min-width:0}.title{overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.bv{font-size:11px;color:#9499a0;margin:4px 0}.actions{display:flex;gap:6px;flex-wrap:nowrap;grid-column:1 / -1!important;justify-content:flex-end}.actions button{font-size:11px;padding:4px 6px}.tab{display:none}:host([data-collapsed]) aside{display:none}:host([data-collapsed]) .tab{display:block}
+        ${ACTION_FEEDBACK_CSS}
+        .item{grid-template-columns:clamp(48px,24%,76px) minmax(0,1fr) 70px}
+        .cover{grid-row:1 / 3;width:100%}
+        .item>.meta{grid-column:1 / 3}
+        .item>.actions{grid-column:3!important;grid-row:1 / 4;align-self:center;display:grid;gap:4px}
+        ${VIDEO_ACTION_COLORS}
+        .item>.actions .action-button,.item>.actions .play-link{display:grid;place-items:center;min-inline-size:70px;
+          min-height:30px;padding:4px 8px;border:0;border-radius:7px;font:400 14px/20px system-ui,sans-serif;text-decoration:none}
+        .item>.actions .action-button{background:var(--biliclip-video-blue);color:#fff}
+        .item>.actions .action-button:hover{background:#008dbf}
+        .item>.actions .play-link{background:var(--biliclip-video-pink);color:#fff}
+        .item>.actions .play-link:hover{background:#f45f8c}
+        .title-tip{position:fixed;z-index:2;max-width:min(320px,calc(100vw - 20px));padding:7px 10px;
+          border:1px solid #e3e8ef;border-radius:8px;background:#fff;color:#18191c;
+          box-shadow:0 4px 16px #182a4426;font:12px/1.5 system-ui,sans-serif;overflow-wrap:anywhere;pointer-events:none}
+
         #status:empty{display:none}#back{margin:4px 0} .tools button{white-space:nowrap}
         :focus-visible{outline:2px solid #00aeec;outline-offset:2px}
-        @media(max-width:900px){aside{width:240px}}
+        aside{width:400px}
+        .search-row{display:flex;align-items:center;gap:10px}.search-row label{white-space:nowrap;font-size:13px;color:#18191c}
+        .tools{border-bottom:1px solid #e3e5e7;gap:16px;margin:10px 0 0}
+        .tools button{background:transparent;border-radius:0;color:#61666d;padding:8px 2px;border-bottom:2px solid transparent}
+        .tools button[aria-pressed=true]{color:#0078a3;border-bottom-color:#00aeec;font-weight:600}
+        #refresh{margin-left:auto;order:3}.collection{display:flex;align-items:center;gap:10px;width:100%;padding:12px 0;border-bottom:1px solid #e3e5e7;background:white;text-align:left;color:#18191c}
+        .collection img{width:72px;height:46px;object-fit:cover;border-radius:4px}.collection span{flex:1;min-width:0;overflow-wrap:anywhere}
+        .collection:hover{background:#f1f2f3}
+        .item{grid-template-columns:minmax(72px,30%) minmax(0,1fr) 54px;gap:3px 10px;padding:12px 0}
+        .cover-wrap{grid-column:1;grid-row:1 / 4;position:relative;align-self:start;aspect-ratio:16/10;background:#f1f2f3;border-radius:6px;overflow:hidden}
+        .cover-wrap .cover{width:100%;height:100%;object-fit:cover}
+        .duration{position:absolute;bottom:3px;right:4px;padding:0 3px;border-radius:3px;background:#18191ccc;color:white;font-size:11px}
+        .item>.title{font-size:14px;font-weight:600}.item>.bv,.item>.meta{grid-column:2;margin:0;font-size:12px}
+        .item>.actions{grid-row:1 / 4}.item>.actions .action-button,.item>.actions .play-link{min-inline-size:54px;padding:4px;min-height:30px;font-size:13px;color:#fff}
+        .empty{padding:28px 8px;text-align:center;color:#61666d}.library-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid #e3e5e7;padding-top:8px;font-size:11px;color:#61666d}
+        #load-more{color:#0078a3;background:transparent}.status[data-state=error]{color:#a12650}.status[data-state=loading]::before{content:'◌ ';color:#0078a3}
+        #retry{color:#a12650;background:#fff0f4;margin-bottom:8px}
+        #back{background:#e5f6fc;color:#0078a3}#breadcrumb{font-size:12px;color:#61666d;padding:6px 0;overflow-wrap:anywhere}
+        @media(max-width:900px){aside{width:320px}.item{grid-template-columns:80px minmax(0,1fr) 48px}.item>.actions .action-button,.item>.actions .play-link{min-inline-size:48px}}
+        @media(max-width:400px){aside{width:calc(100vw - 32px)}.search-row{gap:6px}.item{gap:3px 6px}}
+
+      
+        ${NATIVE_UI_CSS}
       </style>
       <button type="button" class="tab">${PANEL_LOGO}喵贴 · 关联视频库</button>
       <aside aria-label="关联视频库"><header><h2>${PANEL_LOGO}喵贴 · 关联视频库</h2><button type="button" id="collapse" aria-label="收起视频面板">−</button></header>
-      <div class="body"><input id="query" type="search" placeholder="搜索我的视频标题 / BV" aria-label="搜索视频标题或 BV">
+      <div class="body"><div class="search-row"><label id="search-label" for="query">搜索视频</label><input id="query" type="search" placeholder="搜索我的视频标题 / BV" aria-label="搜索视频标题或 BV"></div>
       <div class="tools"><button type="button" id="refresh">刷新</button><button type="button" id="videos">我的视频</button><button type="button" id="collections">合集</button></div>
-      <button type="button" id="back" hidden>← 返回合集</button><div id="status" class="status" role="status"></div><div id="list"></div><button type="button" id="load-more" hidden>加载更多</button></div></aside>`;
+      <button type="button" id="back" hidden>← 返回合集</button><div id="breadcrumb" hidden></div><div id="status" class="status" role="status" aria-live="polite"></div><button type="button" id="retry" hidden>重试</button><div id="list"></div><div class="library-foot"><button type="button" id="load-more" hidden>加载更多 ›</button><span>当前稿件自动排除，避免关联自己</span></div></div></aside>
+      <div id="title-tip" class="title-tip" aria-hidden="true" hidden></div>`;
     const get = id => root.getElementById(id);
+    const titleTip = get('title-tip');
+    const hideTitleTip = () => { titleTip.hidden = true; };
+    const positionTitleTip = event => {
+      if (titleTip.hidden) return;
+      const margin = 10;
+      const gap = 13;
+      const x = Math.max(margin, Math.min(event.clientX + gap, innerWidth - titleTip.offsetWidth - margin));
+      const below = event.clientY + gap;
+      const y = below + titleTip.offsetHeight <= innerHeight - margin
+        ? below
+        : Math.max(margin, event.clientY - gap - titleTip.offsetHeight);
+      titleTip.style.left = `${x}px`;
+      titleTip.style.top = `${y}px`;
+    };
+    root.querySelector('aside').addEventListener('scroll', hideTitleTip, true);
+
     const uid = document.cookie.match(/(?:^|;\s*)DedeUserID=(\d+)/)?.[1];
     const cacheKey = uid ? 'biliclip_my_videos_v1_' + uid : null;
     const state = { videos: [], draft: currentCreatorDraft(), uploadTitle: clean(findUploadFields()?.title?.value), busy: false, render: null, mode: 'videos', collections: [], collectionVideos: [], selected: null, collectionBusy: false, request: 0 };
@@ -2760,13 +2920,23 @@
     const status = text => {
       clearTimeout(statusTimer);
       get('status').textContent = text;
+      get('status').dataset.state = /失败|未填入|未找到/.test(text) ? 'error' : /正在/.test(text) ? 'loading' : 'ready';
+      get('retry').hidden = !/加载失败/.test(text);
       if (text && !document.getElementById('biliclip-walkthrough') && !/正在|失败|未填入|未找到|登录/.test(text)) {
         statusTimer = setTimeout(() => { get('status').textContent = ''; }, 2500);
       }
     };
     state.render = () => {
+      hideTitleTip();
       const query = clean(get('query').value).toLowerCase();
       get('back').hidden = state.mode !== 'collection';
+      get('breadcrumb').hidden = state.mode !== 'collection';
+      get('breadcrumb').textContent = state.mode === 'collection' ? '合集 / ' + state.selected.title : '';
+      get('search-label').textContent = state.mode === 'collections' ? '搜索合集' : '搜索视频';
+      get('query').placeholder = state.mode === 'collections' ? '搜索合集名称' : '搜索我的视频标题 / BV';
+      get('videos').setAttribute('aria-pressed', String(state.mode === 'videos'));
+      get('collections').setAttribute('aria-pressed', String(state.mode !== 'videos'));
+      get('list').setAttribute('aria-busy', String(!!state.loading?.has(viewKey())));
       get('load-more').hidden = !state.more?.[viewKey()];
       get('refresh').disabled = !!state.loading?.has(viewKey());
       get('back').title = state.mode === 'collection' ? state.selected.title : '';
@@ -2774,8 +2944,11 @@
       if (state.mode === 'collections') {
         for (const collection of state.collections.filter(c => !query || c.title.toLowerCase().includes(query))) {
           const button = document.createElement('button'); button.type = 'button'; button.className = 'collection';
-          button.style.cssText = 'width:100%;text-align:left;margin:5px 0;padding:12px';
-          button.textContent = collection.title + ' · ' + collection.count + ' 个视频 ›';
+          if (collection.cover) {
+            const image = document.createElement('img'); image.src = collection.cover; image.alt = ''; image.loading = 'lazy'; image.referrerPolicy = 'no-referrer'; button.append(image);
+          }
+          const label = document.createElement('span'); label.textContent = collection.title + ' · ' + collection.count + ' 个视频';
+          button.append(label, document.createTextNode('›'));
           button.onclick = () => openCollection(collection); get('list').append(button);
         }
         if (!get('list').childNodes.length) get('list').textContent = state.collections.length ? '没有匹配的合集' : '暂无合集';
@@ -2798,32 +2971,58 @@
       for (const video of videos.slice(0, 100)) {
         const item = document.createElement('div'); item.className = 'item';
         const title = document.createElement('div'); title.className = 'title'; title.textContent = video.title;
+        title.addEventListener('pointerenter', event => {
+          if (event.pointerType === 'touch' || title.scrollHeight <= title.clientHeight) return;
+          titleTip.textContent = video.title;
+          titleTip.hidden = false;
+          positionTitleTip(event);
+        });
+        title.addEventListener('pointermove', positionTitleTip);
+        title.addEventListener('pointerleave', hideTitleTip);
         const bv = document.createElement('div'); bv.className = 'bv'; bv.textContent = video.bv;
         const actions = document.createElement('div'); actions.className = 'actions';
-        for (const [label, action] of [
-          ['填入', async () => {
-            const active = currentCreatorDraft();
-            const bv = active.bv || creatorDraftBVs.get(active.aid);
-            if (video.bv === bv || (active.aid && video.aid === active.aid)) { status('不能把当前稿件关联到自己'); return; }
-            status('正在填入关联视频…');
-            try {
-              const ok = await fillCreatorPair(video);
-              status(ok ? '已填入' : '未填入：请先打开关联视频的两个输入框');
-            } catch (error) {
-              status('填入失败：' + error.message);
-            }
-          }],
-          ['复制', () => { savePair(video.bv, video.title); status('已复制'); }]
-        ]) {
-          const button = document.createElement('button'); button.type = 'button'; button.textContent = label;
-          button.title = label === '填入' ? '填入 BV + 标题' : '复制 BV + 标题';
-          button.addEventListener('mousedown', event => event.preventDefault());
-          button.onclick = action; actions.append(button);
-        }
+        const fill = document.createElement('button');
+        fill.type = 'button';
+        fill.className = 'action-button';
+        fill.innerHTML = actionButtonLabel('填入');
+        fill.title = '填入 BV + 标题';
+        fill.addEventListener('mousedown', event => event.preventDefault());
+        fill.onclick = async () => {
+          const active = currentCreatorDraft();
+          const bv = active.bv || creatorDraftBVs.get(active.aid);
+          if (video.bv === bv || (active.aid && video.aid === active.aid)) {
+            setButtonFeedback(fill, '不可自关联', 'error');
+            return;
+          }
+          fill.disabled = true;
+          setButtonFeedback(fill, '填入中…', 'pending');
+          try {
+            const ok = await fillCreatorPair(video);
+            setButtonFeedback(fill, ok ? '已填入' : '未填入', ok ? 'success' : 'error');
+            if (!ok) status('未填入，请先打开关联视频的链接和描述输入框后重试');
+            else status('');
+          } catch (_) {
+            setButtonFeedback(fill, '填入失败', 'error');
+            status('填入失败，请检查关联视频输入框后重试');
+          } finally {
+            fill.disabled = false;
+          }
+        };
+        const playLink = document.createElement('a');
+        playLink.className = 'play-link';
+        playLink.href = `https://www.bilibili.com/video/${video.bv}/`;
+        playLink.target = '_blank';
+        playLink.rel = 'noopener noreferrer';
+        playLink.textContent = '播放';
+        playLink.setAttribute('aria-label', `在新标签页播放：${video.title}`);
+        actions.append(fill, playLink);
+        const coverWrap = document.createElement('div'); coverWrap.className = 'cover-wrap';
         if (video.cover) {
           const cover = document.createElement('img'); cover.className = 'cover'; cover.src = video.cover;
-          cover.alt = ''; cover.loading = 'lazy'; cover.referrerPolicy = 'no-referrer'; item.append(cover);
+          cover.alt = ''; cover.loading = 'lazy'; cover.referrerPolicy = 'no-referrer'; coverWrap.append(cover);
         }
+        if (video.duration > 0) { const duration = document.createElement('span'); duration.className = 'duration'; duration.textContent = pickerDuration(video.duration); coverWrap.append(duration); }
+        item.append(coverWrap);
         const meta = document.createElement('div'); meta.className = 'meta';
         const time = document.createElement('span'); time.textContent = pickerTime(video.created);
         const play = document.createElement('span');
@@ -2861,7 +3060,7 @@
       const key = viewKey(), mode = state.mode, selected = state.selected;
       if (state.loading.has(key)) return;
       if (!uid) { status('请先登录 B 站账号'); return; }
-      state.loading.add(key); state.render();
+      state.loading.add(key); state.render(); status('正在加载…');
       const startPage = append ? (state.pages[key] || 0) + 1 : 1;
       const base = append ? (mode === 'collections' ? state.collections : readRecord(selected)) : [];
       const publish = batch => {
@@ -2903,6 +3102,7 @@
       state.collectionVideos=readRecord(collection);state.render();status('');
       if (!state.loaded.has(viewKey())) refreshCurrent();
     };
+    get('retry').onclick=()=>refreshCurrent();
     get('refresh').onclick=()=>refreshCurrent();
     get('videos').onclick=()=>switchMode('videos');
     get('collections').onclick=()=>switchMode('collections');
@@ -2928,7 +3128,8 @@
   function syncUploadPanel() {
     let host = document.getElementById('biliclip-upload-panel');
     if (!isUploadPage()) { host?.remove(); return; }
-    if (!document.body || host) return;
+    if (host) { syncPanelDescriptionPresets(host.shadowRoot); return; }
+    if (!document.body) return;
     host = document.createElement('div');
     host.id = 'biliclip-upload-panel';
     host.style.cssText = 'all:initial;position:fixed;right:16px;top:160px;z-index:1;max-width:calc(100vw - 24px)';
@@ -2951,24 +3152,43 @@
         .settings{border-top:1px solid #eef1f5;padding-top:8px;margin-top:8px}.settings summary{border:0;padding:0;font-size:11px;color:#9499a0}.settings label{font-size:12px;margin:7px 0}.status{font-size:11px;color:#008abc;margin:8px 0 0;min-height:16px}.foot{font-size:10px;color:#9499a0;margin-top:3px}
         .tab{display:none;background:#00aeec;color:white;font:600 13px/1.5 system-ui,sans-serif}:host([data-collapsed]) .panel{display:none}:host([data-collapsed]) .tab{display:block}
         :focus-visible{outline:2px solid #00aeec;outline-offset:2px}
+      
+        ${NATIVE_UI_CSS}
       </style>
-      <button class="tab" type="button">${PANEL_LOGO}喵贴BiliClip</button>
+      <button class="tab" type="button">${PANEL_LOGO}喵贴助手</button>
+      <style>
+        .overwrite-option{position:relative;display:flex;align-items:center;gap:8px;margin-top:8px}.overwrite-option .info-tip{box-sizing:border-box;display:inline-grid;place-items:center;flex:0 0 16px;min-width:16px;min-height:16px;max-width:16px;max-height:16px;line-height:1;border:1px solid #9499a0;border-radius:50%;padding:0;width:16px;height:16px;background:white;color:#61666d;font:italic 600 11px/1 Georgia;cursor:help}.overwrite-option [role=tooltip]{display:none;position:absolute;bottom:100%;right:0;width:220px;max-width:calc(100vw - 48px);padding:10px;border:1px solid #ccd0d7;border-radius:8px;background:#fff;color:#414852;box-shadow:0 4px 14px #18191c26;font-size:12px;line-height:1.65;z-index:40}.info-tip:hover+span,.info-tip:focus+span{display:block}
+        .description-dropdown{position:relative;width:100%;font-size:13px}
+        .description-dropdown summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid #ccd0d7;border-radius:6px;background:white;cursor:pointer;min-height:34px}
+        .description-dropdown summary::-webkit-details-marker{display:none}
+        .description-dropdown summary:after{content:'⌄';color:#9499a0}
+        .description-dropdown summary:focus-visible{outline:2px solid #0078a3;outline-offset:2px}
+        #preset-summary{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .description-choices{position:absolute;top:100%;left:0;right:0;z-index:30;display:grid;gap:4px;max-height:180px;overflow:auto;padding:6px;margin-top:4px;border:1px solid #ccd0d7;border-radius:6px;background:white;box-shadow:0 4px 14px #18191c1a}
+        .description-choices .description-choice{display:flex;align-items:center;gap:7px;margin:0;padding:6px;border-radius:4px;cursor:pointer}
+        .preset-clear{border:0;border-bottom:1px solid #e3e5e7;background:white;text-align:left;padding:7px;color:#61666d;cursor:pointer}
+        .description-choices .description-choice:hover{background:#f1f2f3}
+        .description-choices input{flex:none;width:14px;height:14px;margin:0;accent-color:#00aeec}
+      </style>
       <aside class="panel" aria-label="投稿工作台">
-        <header><h2>${PANEL_LOGO}喵贴BiliClip<small>8.1.3</small></h2><button class="collapse" type="button" aria-label="收起面板">−</button></header>
+        <header><h2>${PANEL_LOGO}喵贴 · 投稿助手</h2><button class="collapse" type="button" aria-label="收起面板">−</button></header>
         <div class="body">
           <button id="execute" type="button" class="primary">一键执行</button>
-          <div class="row"><span class="name">标题</span><label class="toggle"><input id="copy-title" type="checkbox" checked>抄录到简介第一行</label></div>
+          <h3 class="section-title">内容填写</h3>
+          <div class="row"><span class="name">标题</span><label class="toggle"><input id="copy-title" type="checkbox" checked>标题写入简介首行</label></div>
+          <div class="row"><span class="name" id="preset-heading">简介</span><div><details class="description-dropdown"><summary aria-label="选择简介预设"><span id="preset-summary">不使用简介预设</span></summary><div id="preset" class="description-choices" role="group" aria-labelledby="preset-heading"></div></details><div class="hint">可多选或不选；每条预设追加到简介末尾的新一行。</div><div class="overwrite-option"><label class="toggle"><input id="overwrite-second-line" type="checkbox">复写第二行</label><button class="info-tip" type="button" aria-label="第二行复写说明" aria-describedby="overwrite-help">i</button><span id="overwrite-help" role="tooltip">勾选：用所选预设替换简介第二行，多条预设依次插入，保留第三行及之后的正文。<br>不勾选：保留原文，将预设追加到简介末尾。<br>未选预设：不改动第二行。</span></div></div></div>
+          <h3 class="section-title">投稿选项</h3>
           <div class="row"><span class="name">声明</span><button id="declaration-summary" class="declaration-trigger" type="button" popovertarget="declaration-menu" aria-label="选择创作声明"><span id="declaration-label">请选择声明</span><span class="chevron">⌄</span></button></div>
           <div class="copyright-row"><label class="toggle"><input id="copyright" type="checkbox"><span>内容为自制：未经作者允许，禁止转载</span></label></div>
           <div class="row"><span class="name">分区</span><label class="toggle"><input id="knowledge" type="checkbox" checked>知识</label></div>
-          <div class="row"><label class="name" for="preset">简介</label><div><input id="preset" type="text" placeholder="第二行引导话术"><div class="hint">保留第三行及后续文字</div></div></div>
           <div class="row"><span class="name">推广</span><label class="toggle"><input id="commercial" type="checkbox">增加商业推广信息</label></div>
           <div class="row"><span class="name">更多</span><label class="toggle"><input id="more-auto" type="checkbox">自动展开页面「更多设置」</label></div>
-          <details class="settings"><summary>自动执行设置</summary>
+          <details class="settings"><summary>自动执行与更多设置</summary>
             <label class="toggle"><input id="knowledge-auto" type="checkbox">自动选择知识分区</label>
             <label class="toggle"><input id="declaration-auto" type="checkbox">自动选择预设声明</label>
           </details>
-          <p class="status" role="status" aria-live="polite">设置自动保存</p><div class="foot">执行后请核对内容，再手动投稿</div>
+          <p class="status" role="status" aria-live="polite">设置自动保存</p>
+          <div class="foot">执行后请核对内容，再手动投稿</div>
         </div>
       </aside>
       <div id="declaration-menu" class="declaration-menu" popover="auto" role="dialog" aria-label="创作声明选项">
@@ -2985,7 +3205,15 @@
         <div class="menu-footer"><span>选中后立即应用</span></div>
       </div>`;
     const get = id => root.querySelector('#' + id);
-    get('preset').value = uploadPrefs.secondLine;
+    syncPanelDescriptionPresets(root);
+    root.querySelector('.description-dropdown').addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); root.querySelector('.description-dropdown').open = false; root.querySelector('.description-dropdown summary').focus(); } });
+    get('overwrite-second-line').checked = uploadPrefs.overwriteSecondLine;
+    const updateDescriptionHint = () => {
+      root.querySelector('.description-dropdown').nextElementSibling.textContent = get('overwrite-second-line').checked
+        ? '用所选预设替换第二行，保留后续正文。'
+        : '可多选或不选；每条预设追加到简介末尾的新一行。';
+    };
+    updateDescriptionHint();
     get('commercial').checked = GM_getValue('biliclip_commercial', false) === true;
     get('more-auto').checked = GM_getValue('biliclip_expand_more_settings', false) === true;
     get('knowledge-auto').checked = autoKnowledge;
@@ -3021,7 +3249,8 @@
     };
     summary();
     const save = () => {
-      uploadPrefs = uploadSettings({secondLine:get('preset').value, autoSecondLine:false});
+      uploadPrefs = uploadSettings({...uploadPrefs, overwriteSecondLine: get('overwrite-second-line').checked});
+      updateDescriptionHint();
       const main = root.querySelector('[name=main]:checked')?.value || '';
       if (main === '内容为转载') get('copyright').checked = false;
       declarationPrefs = declarationSettings({main, copyright:get('copyright').checked, auto:get('declaration-auto').checked});
@@ -3085,7 +3314,7 @@
         }
       });
     }
-    get('preset').addEventListener('input', save);
+
     const collapse = value => {if (!value) host.biliclipUserAdjusted = true;if (menu.matches(':popover-open')) menu.hidePopover();host.toggleAttribute('data-collapsed', value);GM_setValue('biliclip_upload_panel_collapsed', value);};
     host.removeAttribute('data-collapsed');
     root.querySelector('.collapse').onclick = () => collapse(true);
@@ -3096,6 +3325,7 @@
       if (menu.matches(':popover-open')) menu.hidePopover();
       panelExecuting = true;
       get('execute').disabled = true;
+      get('execute').dataset.guideResult = 'pending';
       get('execute').textContent = '正在执行…';
       const results = [];
       try {
@@ -3109,14 +3339,20 @@
         if (title !== null || uploadPrefs.secondLine) {
           const fields = findUploadFields();
           if (!fields) throw new Error('未找到简介框');
-          const text = descriptionLines(descriptionText(fields.description), title, uploadPrefs.secondLine || null);
-          results.push(writeDescription(fields.description,text) ? '简介✓' : '简介未完成');
+          const text = descriptionLines(descriptionText(fields.description), title, uploadPrefs.secondLine || null, uploadPrefs.overwriteSecondLine);
+          const done = writeDescription(fields.description,text);
+          results.push(done ? '简介✓' : '简介未完成');
+          if (done) {
+            const completed = [title !== null ? '标题' : '', uploadPrefs.secondLine ? `${uploadPrefs.selectedIndices.length}条简介预设` : ''].filter(Boolean).join('与');
+            toast(`${completed}已执行完成`, 'blue', 2000, null, 'upper-center');
+          }
         }
         root.querySelector('.status').textContent = results.join(' · ') || '请勾选需要执行的项目';
       } catch (error) {
         root.querySelector('.status').textContent = [...results,error.message].join(' · ');
       } finally {
         get('execute').disabled = declarationPending > 0;
+        get('execute').dataset.guideResult = results.some(result => result.endsWith('✓')) ? 'success' : 'error';
         get('execute').textContent = '一键执行';
         panelExecuting = false;
       }
@@ -3127,156 +3363,59 @@
 
   /* ==================== 提醒 ==================== */
 
-  function toast(
-    message,
-    color = 'blue',
-    duration = 1800,
-    anchor = null
-  ) {
-    let host =
-      document.getElementById(
-        'biliclip-toast-host'
-      );
-
+  function toast(message, color = 'blue', duration = 1800, anchor = null, placement = 'anchor') {
+    let host = document.getElementById('biliclip-toast-host');
     if (!host) {
-      host =
-        document.createElement(
-          'div'
-        );
-
-      host.id =
-        'biliclip-toast-host';
-
-      host.style.cssText = [
-        'all:initial',
-        'position:fixed',
-        'inset:0',
-        'width:0',
-        'height:0',
-        'z-index:2147483647',
-        'pointer-events:none'
-      ].join(';');
-
-      const shadow =
-        host.attachShadow({
-          mode: 'open'
-        });
-
-      shadow.innerHTML = `
-        <style>
-          .toast {
-            position: fixed;
-            top: 72px;
-            left: 50%;
-            max-width:
-              calc(100vw - 24px);
-            padding: 9px 14px;
-            border:
-              1px solid
-              rgba(255,255,255,.75);
-            border-radius: 11px;
-            color: #30343b;
-            background:
-              rgba(255,255,255,.96);
-            box-shadow:
-              0 9px 28px
-              rgba(24,25,28,.15);
-            backdrop-filter:
-              blur(18px);
-            font:
-              13px/1.5
-              -apple-system,
-              BlinkMacSystemFont,
-              "Segoe UI",
-              "PingFang SC",
-              sans-serif;
-            white-space: nowrap;
-            opacity: 0;
-            transform:
-              translate(-50%,-7px)
-              scale(.97);
-            transition:
-              .22s
-              cubic-bezier(
-                .2,.9,.25,1.15
-              );
-          }
-
-          .toast.blue {
-            border-color:
-              rgba(0,174,236,.28);
-          }
-
-          .toast.pink {
-            border-color:
-              rgba(251,114,153,.36);
-          }
-
-          .toast.show {
-            opacity: 1;
-            transform:
-              translate(-50%,0)
-              scale(1);
-          }
-        </style>
-
-        <div
-          class="toast"
-          role="status"
-        ></div>
-      `;
-
-      (
-        document.body ||
-        document.documentElement
-      ).appendChild(host);
+      host = document.createElement('div');
+      host.id = 'biliclip-toast-host';
+      host.style.cssText = 'all:initial;position:fixed;inset:0;width:0;height:0;z-index:2147483647;pointer-events:none';
+      const shadow = host.attachShadow({mode:'open'});
+      shadow.innerHTML = `<style>
+        .toast{position:fixed;top:72px;left:50%;display:none;max-width:calc(100vw - 24px);
+          padding:9px 14px;border:1px solid #e3e5e7;border-radius:6px;color:#30343b;background:#fff;
+          box-shadow:0 4px 16px #18191c1a;font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif;
+          opacity:0;transform:translate(-50%,4px);transition:opacity 160ms ease-out,transform 160ms ease-out}
+        .toast.blue{border-color:#00aeec47}.toast.pink{border-color:#fb72995c}
+        .toast.show{opacity:1;transform:translate(-50%,0)}
+        ${NATIVE_UI_CSS}
+      </style><div class="toast" role="status" aria-live="polite">${PANEL_LOGO}<svg class="toast-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"></svg><span class="toast-message"></span></div>`;
+      (document.body || document.documentElement).appendChild(host);
     }
-
-    const box =
-      host.shadowRoot
-        .querySelector(
-          '.toast'
-        );
-
-    box.textContent = message;
-    box.className =
-      `toast ${color}`;
-    box.style.display =
-      'block';
+    const box = host.shadowRoot.querySelector('.toast');
+    clearTimeout(host._timer);
+    clearTimeout(host._hideTimer);
+    if (host._frame) cancelAnimationFrame(host._frame);
+    box.querySelector('.toast-message').textContent = message;
+    box.querySelector('.toast-icon').innerHTML = color === 'pink'
+      ? '<path d="m5 5 10 10M15 5 5 15"/>' : '<path d="m4 10 4 4 8-9"/>';
+    const showing = box.classList.contains('show') && box.style.display !== 'none';
+    box.className = `toast ${color}${showing ? ' show' : ''}`;
+    box.style.display = 'flex';
     box.style.top = '';
     box.style.left = '';
-    if (anchor?.isConnected) {
+    if (placement === 'upper-center') {
+      box.style.left = `${document.documentElement.clientWidth / 2}px`;
+      box.style.top = `${Math.max(12, Math.min(window.innerHeight - box.offsetHeight - 12, Math.min(160, Math.max(64, window.innerHeight * .2))))}px`;
+    } else if (anchor?.isConnected) {
       const rect = anchor.getBoundingClientRect();
       const viewport = document.documentElement.clientWidth;
       const halfWidth = box.offsetWidth / 2;
-      const center = Math.max(halfWidth + 8, Math.min(viewport - halfWidth - 8, rect.left + rect.width / 2));
+      const center = Math.max(halfWidth + 12, Math.min(viewport - halfWidth - 12, rect.left + rect.width / 2));
+      const gap = 20;
+      const above = rect.top - box.offsetHeight - gap;
+      const top = above >= 12 ? above : rect.bottom + gap;
       box.style.left = `${center}px`;
-      box.style.top = `${Math.max(8, rect.top - box.offsetHeight - 6)}px`;
+      box.style.top = `${Math.max(12, Math.min(window.innerHeight - box.offsetHeight - 12, top))}px`;
     }
-
-    requestAnimationFrame(
-      () => {
-        box.classList.add(
-          'show'
-        );
-      }
-    );
-
-    clearTimeout(
-      host._timer
-    );
-
-    host._timer =
-      setTimeout(() => {
-        box.classList.remove(
-          'show'
-        );
-
-        setTimeout(() => {
-          box.style.display =
-            'none';
-        }, 220);
-      }, duration);
+    // Establish the initial frame, then fade in without scaling or overshoot.
+    if (!showing) {
+      box.getBoundingClientRect();
+      host._frame = requestAnimationFrame(() => { box.classList.add('show'); host._frame = 0; });
+    }
+    host._timer = setTimeout(() => {
+      box.classList.remove('show');
+      host._hideTimer = setTimeout(() => { box.style.display = 'none'; }, 160);
+    }, duration);
   }
 
   /* ==================== B站按钮 ==================== */
@@ -3333,226 +3472,156 @@
             sans-serif;
         }
 
-        .hover,
-        .bar {
+        ${ACTION_FEEDBACK_CSS}
+        ${VIDEO_ACTION_COLORS}
+        .hover-actions {
           position: fixed;
           display: none;
-          align-items: center;
+          align-items: stretch;
+          gap: 6px;
+          flex-wrap:nowrap;
           pointer-events: auto;
         }
-
-        .hover {
-          gap: 5px;
-          height: 32px;
-          padding:
-            0 11px 0 8px;
-          border: 0;
-          border-radius: 10px;
-          color: #ffffff;
-          background: #fb7299;
-          box-shadow:
-            0 6px 17px
-            rgba(251,114,153,.28);
-          font-size: 12px;
-          font-weight: 600;
-          cursor: pointer;
-          white-space: nowrap;
-          transition: .18s;
+        .bar { display:flex; flex-wrap:wrap; align-items:center; column-gap:5px; row-gap:4px; padding:5px 0; }
+        .bar .group-divider { width:1px; height:17px; margin:0 4px; background:#e3e5e7; }
+        .action-button {
+          min-inline-size:68px;
+          min-height:28px;
+          padding:3px 8px;
+          border:0;
+          border-radius:5px;
+          font-size:12px;
+          line-height:18px;
+          white-space:nowrap;
+          cursor:pointer;
         }
-
-        .hover:hover,
-        .primary:hover {
-          background: #ff83a7;
-          transform:
-            translateY(-1px);
+        .copy-content { display:inline-grid; grid-template-columns:14px minmax(0,1fr); align-items:center; gap:5px; }
+        .copy-icon { display:inline-grid; width:14px; height:14px; place-items:center; }
+        .copy-icon svg { width:14px; height:14px; grid-area:1/1; }
+        .copy-icon .copy-check { display:none; }
+        .action-button[data-feedback="success"] .copy-icon .copy-glyph { display:none; }
+        .action-button[data-feedback="success"] .copy-icon .copy-check { display:block; }
+        .copy-text { display:inline-grid; place-items:center; }
+        .bar .action-button {
+          --icon-color:#008db8;
+          --feedback-color:#006583;
+          --hover-bg:#e2f5fc;
+          --press-bg:#cbeaf6;
+          min-inline-size:76px;
+          min-height:35px;
+          padding:4px 10px;
+          font-size:13px;
+          line-height:20px;
+          color:#51565d;
+          background:transparent;
+          transition:color .12s,background-color .12s,box-shadow .12s;
         }
-
-        .hover:active,
-        .btn:active {
-          transform:
-            scale(.95);
+        .bar .action-button:is([data-action="bv"],[data-action="both"]) {
+          --icon-color:#d43f72;
+          --feedback-color:#98274d;
+          --hover-bg:#fce5ed;
+          --press-bg:#f7cddc;
         }
-
-        .hover:disabled {
-          opacity: .72;
-          cursor: wait;
+        .bar .copy-content { grid-template-columns:16px minmax(0,1fr); gap:6px; }
+        .bar .copy-icon { width:16px; height:16px; color:var(--icon-color); }
+        .bar .copy-icon svg { width:16px; height:16px; }
+        .bar .action-button:hover { color:#202124; background:var(--hover-bg); }
+        .bar .action-button:active { background:var(--press-bg); box-shadow:inset 0 0 0 1px var(--icon-color); }
+        .hover-actions .action-button {
+          flex:1 1 0;
+          width:100%;
+          min-width:0;
+          min-inline-size:0;
+          overflow:hidden;
+          height:calc(32px * var(--cover-scale,1));
+          min-height:22px;
+          font-size:clamp(8px, calc(12px * var(--cover-scale,1)), 12px);
+          padding:0 calc(8px * var(--cover-scale,1));
+          border-radius:10px;
+          color:#fff;
+          --action-color:var(--biliclip-video-blue);
+          --action-hover:#008dbf;
+          background:var(--action-color);
+          box-shadow:0 5px 14px #00aeec38;
+          font-weight:600;
         }
-
-        .icon {
-          display: grid;
-          place-items: center;
-          width: 19px;
-          height: 19px;
-          border-radius: 6px;
-          background:
-            rgba(255,255,255,.18);
+        .hover-actions .copy-content { display:flex; justify-content:center; width:100%; min-width:0; gap:calc(5px * var(--cover-scale,1)); }
+        .hover-actions .copy-icon { flex:none; width:calc(14px * var(--cover-scale,1)); height:calc(14px * var(--cover-scale,1)); }
+        .hover-actions .copy-icon svg { width:100%; height:100%; }
+        .hover-actions[data-compact="true"] .copy-icon { display:none; }
+        .hover-actions .copy-text { min-width:0; overflow:hidden; }
+        .hover-actions .action-label { overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+        .hover-actions .hover {
+          --action-color:var(--biliclip-video-pink);
+          --action-hover:#df507c;
+          padding-left:calc(6px * var(--cover-scale,1));
+          box-shadow:0 5px 14px #fb729947;
         }
-
-        .icon svg {
-          width: 11px;
-          height: 11px;
+        .hover-actions .hover .copy-content { grid-template-columns:19px minmax(0,1fr); }
+        .hover-actions .hover .copy-icon { width:calc(19px * var(--cover-scale,1)); height:calc(19px * var(--cover-scale,1)); border-radius:4px; background:#ffffff2e; }
+        .hover-actions .hover .copy-icon svg { width:70%; height:70%; }
+        .hover-actions .action-button:hover { background:var(--action-hover); }
+        .hover-actions .action-button:active { box-shadow:inset 0 0 0 2px #ffffffa0; }
+        .action-button:disabled { cursor:wait; }
+        .action-button:focus-visible { outline:2px solid #00a1d6; outline-offset:1px; }
+        .bar .action-button[data-feedback] { color:var(--feedback-color); background:var(--hover-bg); }
+        .bar .action-button:is([data-feedback="success"],[data-feedback="error"]) {
+          background:var(--press-bg);
+          box-shadow:inset 0 0 0 1px var(--icon-color);
         }
-
-        .bar {
-          gap: 7px;
-        }
-
-        .btn {
-          display: inline-flex;
-          align-items: center;
-          gap: 5px;
-          height: 32px;
-          padding: 0 11px;
-          border: 0;
-          border-radius: 10px;
-          color: #ffffff;
-          background: #00aeec;
-          box-shadow:
-            0 6px 16px
-            rgba(0,174,236,.22);
-          font-size: 12px;
-          font-weight: 600;
-          cursor: pointer;
-          white-space: nowrap;
-          transition: .18s;
-        }
-
-        .btn:hover {
-          background: #20baef;
-          transform:
-            translateY(-1px);
-        }
-
-        .btn.primary {
-          background: #fb7299;
-          box-shadow:
-            0 6px 16px
-            rgba(251,114,153,.24);
-        }
-
-        .mini,
-        .mini svg {
-          display: grid;
-          width: 14px;
-          height: 14px;
-        }
-
-        .tip {
-          position: fixed;
-          display: none;
-          padding: 6px 10px;
-          border:
-            1px solid
-            rgba(0,174,236,.2);
-          border-radius: 9px;
-          color: #30343b;
-          background:
-            rgba(255,255,255,.95);
-          box-shadow:
-            0 7px 20px
-            rgba(24,25,28,.13);
-          font:
-            11px/1.45
-            -apple-system,
-            BlinkMacSystemFont,
-            "Segoe UI",
-            "PingFang SC",
-            sans-serif;
-          white-space: nowrap;
-          opacity: 0;
-          transform:
-            translateY(5px);
-          transition: .2s;
-        }
-
-        .tip.show {
-          opacity: 1;
-          transform:
-            translateY(0);
-        }
+        .bar .action-button[data-feedback] .copy-icon { color:inherit; }
+        .hover-actions .action-button[data-feedback] { background:var(--action-color); }
+        .hover-actions .action-button[data-feedback="success"] { box-shadow:inset 0 0 0 1px #ffffffb0; }
+        .hover-actions .action-button[data-feedback="error"] { background:var(--action-hover); box-shadow:inset 0 0 0 1px #fff; }
+        @media(prefers-reduced-motion:reduce) { .bar .action-button { transition:none; } }
+      
+        ${NATIVE_UI_CSS}
       </style>
 
-      <button
-        class="hover"
-        type="button"
-      >
-        <span class="icon">
-          ${copyIcon()}
-        </span>
-
-        <span class="hover-text">
-          复制 BV + 标题
-        </span>
-      </button>
-
-      <div class="bar">
-        <button
-          class="btn"
-          data-action="title"
-        >
-          <span class="mini">
-            ${copyIcon()}
-          </span>
-          复制标题
-        </button>
-
-        <button
-          class="btn"
-          data-action="bv"
-        >
-          <span class="mini">
-            ${copyIcon()}
-          </span>
-          复制 BV
-        </button>
-
-        <button
-          class="btn primary"
-          data-action="both"
-        >
-          <span class="mini">
-            ${copyIcon()}
-          </span>
-          复制 BV+标题
-        </button>
+      <div class="hover-actions" aria-label="喵贴 · 复制视频信息">
+        ${copyActionButton('both', '复制 BV + 标题')}
+        ${copyActionButton('title-link', '复制标题 + 链接', 'hover')}
       </div>
 
-      <div class="tip"></div>
+      <div class="bar" role="group" aria-label="复制视频信息">
+        ${copyActionButton('title', '复制标题')}
+        ${copyActionButton('link', '复制链接')}
+        ${copyActionButton('bv', '复制 BV')}
+        <span class="group-divider" aria-hidden="true"></span>
+        ${copyActionButton('both', '复制 BV + 标题', 'primary')}
+        ${copyActionButton('title-link', '复制标题 + 链接')}
+      </div>
     `;
 
     document.body
       .appendChild(host);
 
+    const barHost = document.createElement('div');
+    barHost.id = 'biliclip-video-copy-bar';
+    const barRoot = barHost.attachShadow({ mode: 'open' });
+    const bar = shadow.querySelector('.bar');
+    barRoot.append(shadow.querySelector('style').cloneNode(true), bar);
+
     ui = {
       host,
-      hover:
-        shadow.querySelector(
-          '.hover'
-        ),
-      hoverText:
-        shadow.querySelector(
-          '.hover-text'
-        ),
-      bar:
-        shadow.querySelector(
-          '.bar'
-        ),
-      tip:
-        shadow.querySelector(
-          '.tip'
-        ),
+      barHost,
+      bar,
+      hoverActions: shadow.querySelector('.hover-actions'),
       active: null,
-      title: null,
-      frame: 0,
-      tipTimer: 0
+      frame: 0
     };
 
     bindBiliUI();
-    const modeObserver = new MutationObserver(syncVideoBar);
-    modeObserver.observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['class', 'data-screen'] });
     document.addEventListener('fullscreenchange', syncVideoBar);
     document.addEventListener('webkitfullscreenchange', syncVideoBar);
-    syncVideoBar();
+    ui.nativeMountReady = false;
+    const mountNativeRow = () => setTimeout(() => {
+      if (ui?.host !== host) return;
+      ui.nativeMountReady = true;
+      syncVideoBar();
+    }, 1500);
+    if (document.readyState === 'complete') mountNativeRow();
+    else window.addEventListener('load', mountNativeRow, {once:true});
 
     setInterval(
       syncVideoBar,
@@ -3571,30 +3640,48 @@
     );
   }
 
-  function copyIcon() {
-    return [
-      '<svg ',
-      'viewBox="0 0 24 24" ',
-      'fill="none" ',
-      'stroke="currentColor" ',
-      'stroke-width="2.2">',
-      '<rect ',
-      'x="8" y="8" ',
-      'width="11" height="11" ',
-      'rx="2"/>',
-      '<path ',
-      'd="M16 8V6a2 2 0 0 0-2-2H6',
-      'a2 2 0 0 0-2 2v8',
-      'a2 2 0 0 0 2 2h2"/>',
-      '</svg>'
-    ].join('');
+  function actionButtonLabel(label) {
+    return `<span class="action-label">${label}</span><span class="action-feedback" role="status"></span>`;
+  }
+
+  function setButtonFeedback(button, label, state) {
+    clearTimeout(actionFeedbackTimers.get(button));
+    button.querySelector('.action-feedback').textContent = label;
+    if (!label) {
+      delete button.dataset.feedback;
+      return;
+    }
+    button.dataset.feedback = state;
+    if (state !== 'pending') {
+      actionFeedbackTimers.set(button, setTimeout(() => setButtonFeedback(button, ''), state === 'error' ? 2400 : 1300));
+    }
+  }
+
+  function copyActionButton(action, label, extraClass = '') {
+    const paths = {
+      title: '<path d="M3 4h10M8 4v8M6 12h4"/>',
+      link: '<path d="M7 5l2-2a3 3 0 0 1 4 4l-2 2M9 11l-2 2a3 3 0 0 1-4-4l2-2m1 3 4-4"/>',
+      bv: '<rect x="2.5" y="3.5" width="11" height="9" rx="2"/><path d="m7 6 3 2-3 2z"/>',
+      both: '<rect x="6" y="6" width="7.5" height="7.5" rx="1.5"/><path d="M10 3.5H4A1 1 0 0 0 3 4.5V10"/>',
+      'title-link': '<path d="M3 4h10M8 4v5m-5 3h3m5 0h2M6 10l-1 2 1 2m4-4 1 2-1 2m-3-2h2"/>'
+    };
+    const icon = (className, body) => `<svg class="${className}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+    return `<button class="action-button ${extraClass}" type="button" data-action="${action}">
+      <span class="copy-content">
+        <span class="copy-icon" aria-hidden="true">${icon('copy-glyph', paths[action])}${icon('copy-check', '<path d="m3.5 8 3 3 6-6"/>')}</span>
+        <span class="copy-text">${actionButtonLabel(label)}</span>
+      </span>
+    </button>`;
   }
 
   function bindBiliUI() {
     document.addEventListener(
       'pointermove',
       event => {
-        if(ui?.tutorialCover){positionHover();return;}
+        if(ui?.tutorialCover){pinHomeGuideCover();return;}
+        if (ui && event.target instanceof Element && excludedVideoSurface(event.target)) {
+          ui.hoverActions.style.display = 'none'; ui.active = null; return;
+        }
         if (
           !ui ||
           ui.frame
@@ -3612,10 +3699,10 @@
           requestAnimationFrame(
             () => {
               ui.frame = 0;
-              if(ui.tutorialCover){positionHover();return;}
+              if(ui.tutorialCover){pinHomeGuideCover();return;}
 
               if (
-                ui.hover.matches(
+                ui.hoverActions.matches(
                   ':hover'
                 )
               ) {
@@ -3626,7 +3713,7 @@
                 findCover(x, y);
 
               if (!cover) {
-                ui.hover.style.display =
+                ui.hoverActions.style.display =
                   'none';
 
                 ui.active = null;
@@ -3641,6 +3728,11 @@
 
               if (!bv) return;
 
+              if (ui.active?.cover === cover && ui.active.bv === bv) {
+                positionHover();
+                return;
+              }
+
               ui.active = {
                 cover,
                 bv,
@@ -3650,14 +3742,9 @@
                   )
               };
 
-              ui.hoverText
-                .textContent =
-                '复制 BV + 标题';
+              for (const button of ui.hoverActions.querySelectorAll('button')) setButtonFeedback(button, '');
 
-              ui.hover.disabled =
-                false;
-
-              ui.hover.style.display =
+              ui.hoverActions.style.display =
                 'flex';
 
               positionHover();
@@ -3667,160 +3754,56 @@
       true
     );
 
-    ui.hover.addEventListener(
-      'click',
-      async event => {
-        event.preventDefault();
-        event.stopPropagation();
+    let copyInProgress = false;
+    for (const group of [ui.hoverActions, ui.bar]) {
+      const hovered = group === ui.hoverActions;
+      for (const button of group.querySelectorAll('button[data-action]')) {
+        button.addEventListener('click', async event => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (copyInProgress) return;
 
-        const video =
-          ui.active;
+          const action = button.dataset.action;
+          const bv = hovered ? ui.active?.bv : getBV(location.href);
+          if (!bv) return setButtonFeedback(button, '复制失败', 'error');
 
-        if (!video) return;
+          const link = `https://www.bilibili.com/video/${bv}/`;
+          const needsTitle = action !== 'bv' && action !== 'link';
+          copyInProgress = true;
+          button.disabled = true;
+          const feedback = (label, state) => {
+            if (!hovered || ui.active?.bv === bv) setButtonFeedback(button, label, state);
+          };
+          feedback('复制中…', 'pending');
+          try {
+            let title = needsTitle ? (hovered ? ui.active?.title : currentTitle()) : '';
+            if (needsTitle && !title) {
+              title = await fetchTitle(bv);
+              if (!title) return feedback('无标题', 'error');
+            }
 
-        ui.hover.disabled =
-          true;
-
-        ui.hoverText
-          .textContent =
-          '读取中…';
-
-        const title =
-          video.title ||
-          await fetchTitle(
-            video.bv
-          );
-
-        if (!title) {
-          ui.hover.disabled =
-            false;
-
-          ui.hoverText
-            .textContent =
-            '读取失败';
-
-          buttonTip(
-            ui.hover,
-            '读取失败，请重试'
-          );
-
-          return;
-        }
-
-        savePair(
-          video.bv,
-          title
-        );
-
-        ui.hover.disabled =
-          false;
-
-        ui.hoverText
-          .textContent =
-          '已复制';
-
-        buttonTip(
-          ui.hover,
-          '✓ 已复制 · 创作中心一次粘贴'
-        );
-
-        setTimeout(() => {
-          if (ui?.hover) {
-            ui.hoverText
-              .textContent =
-              '复制 BV + 标题';
+            if (action === 'both') {
+              await savePair(bv, title);
+            } else {
+              const text = { bv, title, link, 'title-link': `${title}\n${link}` }[action];
+              await writeClipboard(text);
+              clearPair();
+            }
+            feedback('已复制', 'success');
+            toast('已复制，去粘贴吧', 'blue', 1800, button);
+          } catch (_) {
+            feedback('复制失败', 'error');
+          } finally {
+            copyInProgress = false;
+            button.disabled = false;
           }
-        }, 1600);
+        });
       }
-    );
+    }
+  }
 
-    ui.bar.addEventListener(
-      'click',
-      async event => {
-        const button =
-          event.target.closest(
-            'button[data-action]'
-          );
-
-        if (!button) return;
-
-        event.preventDefault();
-        event.stopPropagation();
-
-        const bv =
-          getBV(
-            location.href
-          );
-
-        const title =
-          currentTitle() ||
-          (
-            bv
-              ? await fetchTitle(bv)
-              : ''
-          );
-
-        if (
-          button.dataset.action ===
-          'bv'
-        ) {
-          if (!bv) {
-            return buttonTip(
-              button,
-              'BV 读取失败'
-            );
-          }
-
-          clearPair();
-          writeClipboard(bv);
-
-          return buttonTip(
-            button,
-            '✓ BV 已复制'
-          );
-        }
-
-        if (
-          button.dataset.action ===
-          'title'
-        ) {
-          if (!title) {
-            return buttonTip(
-              button,
-              '标题读取失败'
-            );
-          }
-
-          clearPair();
-          writeClipboard(title);
-
-          return buttonTip(
-            button,
-            '✓ 标题已复制'
-          );
-        }
-
-        if (
-          !bv ||
-          !title
-        ) {
-          return buttonTip(
-            button,
-            '读取失败'
-          );
-        }
-
-        savePair(
-          bv,
-          title
-        );
-
-        buttonTip(
-          button,
-          '✓ 已复制 · 创作中心一次粘贴'
-        );
-      }
-    );
+  function excludedVideoSurface(element) {
+    return !!element.closest('header, nav, .bili-header, .bili-header__bar, .international-header, .mini-header, .bili-header-m, .bili-header__channel, .header-history, .header-favorite, .header-dynamic, .history-entry, .favorite-entry, .dynamic-entry, [class*="history-panel"], [class*="favorite-panel"], [class*="header-dynamic"], [class*="history-popover"], [class*="favorite-popover"], [class*="dynamic-popover"], .v-popover, .v-popover-wrap, .v-popover-content, .van-popover, [role="menu"]');
   }
 
   function findCover(x, y) {
@@ -3829,6 +3812,10 @@
         x,
         y
       );
+
+    // elementsFromPoint includes content behind translucent popovers. Never fall
+    // through to a background card when any foreground navigation surface is hit.
+    if (elements.some(element => element instanceof Element && excludedVideoSurface(element))) return null;
 
     for (
       const element of elements
@@ -3846,6 +3833,7 @@
 
       if (
         !anchor ||
+        excludedVideoSurface(anchor) ||
         !getBV(anchor.href)
       ) {
         continue;
@@ -3879,41 +3867,39 @@
     return null;
   }
 
+  function coverBounds(cover) {
+    const outer = cover.getBoundingClientRect();
+    // Some personal-space links include metadata; constrain the overlay to the visual cover.
+    const image = cover.querySelector('picture, img, video, [class*="cover"], [class*="pic"]');
+    const visual = image?.getBoundingClientRect();
+    return visual && visual.width >= 80 && visual.height >= 45 &&
+      visual.left >= outer.left - 1 && visual.right <= outer.right + 1 &&
+      visual.top >= outer.top - 1 && visual.bottom <= outer.bottom + 1 ? visual : outer;
+  }
+
+  function hoverLayout(rect, viewportWidth) {
+    const left = Math.max(0, rect.left), right = Math.min(viewportWidth, rect.right);
+    const width = right - left - 16;
+    return {left:left + 8, top:rect.top + 8, width, scale:Math.min(1, width / 280)};
+  }
+
   function positionHover() {
-    const cover =
-      ui?.active?.cover;
-
+    const cover = ui?.active?.cover;
     if (!cover) return;
-
-    const rect =
-      cover.getBoundingClientRect();
-
-    const width =
-      ui.hover.offsetWidth ||
-      145;
-
-    ui.hover.style.left =
-      `${
-        Math.max(
-          8,
-          Math.min(
-            innerWidth -
-              width -
-              8,
-            rect.right -
-              width -
-              8
-          )
-        )
-      }px`;
-
-    ui.hover.style.top =
-      `${
-        Math.max(
-          8,
-          rect.top + 8
-        )
-      }px`;
+    if (!cover.isConnected || excludedVideoSurface(cover)) {
+      ui.hoverActions.style.display = 'none'; ui.active = null; return;
+    }
+    const rect = coverBounds(cover);
+    const layout = hoverLayout(rect, innerWidth);
+    if (layout.width < 110 || rect.top < 0 || rect.height < 40) {
+      ui.hoverActions.style.display = 'none'; return;
+    }
+    ui.hoverActions.dataset.compact = String(layout.width < 210);
+    ui.hoverActions.style.setProperty('--cover-scale', String(layout.scale));
+    Object.assign(ui.hoverActions.style, {
+      display:'flex', left:layout.left + 'px', top:layout.top + 'px', width:layout.width + 'px',
+      flexDirection:'row'
+    });
   }
 
   function playerIsFullscreen() {
@@ -3922,299 +3908,52 @@
   }
 
   function syncFullscreenUI() {
-    if (!ui) return;
     const hidden = playerIsFullscreen();
+    if (ui.fullscreen === hidden) return hidden;
+    ui.fullscreen = hidden;
     ui.host.style.setProperty('display', hidden ? 'none' : 'block', 'important');
+    ui.barHost.hidden = hidden;
     if (hidden) {
-      ui.hover.style.display = 'none';
-      ui.bar.style.display = 'none';
+      ui.hoverActions.style.display = 'none';
       ui.active = null;
     }
+    return hidden;
   }
 
   function syncVideoBar() {
-    if (!ui) return;
-    syncFullscreenUI();
-    if (playerIsFullscreen()) return;
-
-    if (
-      !/^\/video\/BV[0-9A-Za-z]{10}/i
-        .test(
-          location.pathname
-        )
-    ) {
-      ui.title = null;
-
-      ui.bar.style.display =
-        'none';
-
+    if (!ui || !ui.nativeMountReady || syncFullscreenUI()) return;
+    const bv = getBV(location.href);
+    if (!bv) {
+      if (ui.barHost.isConnected) ui.barHost.remove();
+      ui.barAnchor = null;
       return;
     }
 
-    ui.title =
-      document.querySelector(
-        [
-          'h1.video-title',
-          'h1[data-title]',
-          '.video-info-title h1',
-          '.video-title'
-        ].join(',')
-      );
+    // The toolbar can be rebuilt while comments and recommendations load.
+    // Keep the row attached to the player instead of following toolbar mutations.
+    if (ui.barAnchor?.isConnected && ui.barHost.isConnected &&
+        ui.barHost.parentElement === ui.barAnchor.parentElement) return;
 
-    if (!ui.title) {
-      ui.bar.style.display =
-        'none';
+    const player = document.querySelector('#bilibili-player, #playerWrap, .bpx-player-container');
+    const toolbar = document.querySelector('#arc_toolbar_report, .video-toolbar-container, .video-toolbar');
+    const row = toolbar?.closest('.video-toolbar-container') || toolbar;
+    const parent = row?.parentElement;
+    if (!player || !parent || row.contains(player) || player.contains(row) ||
+        !(player.compareDocumentPosition(row) & 4)) return;
 
-      return;
+    if (parent.contains(player)) {
+      let anchor = player;
+      while (anchor.parentElement !== parent) anchor = anchor.parentElement;
+      ui.barAnchor = anchor;
+      anchor.after(ui.barHost);
+    } else {
+      ui.barAnchor = row;
+      row.before(ui.barHost);
     }
-
-    ui.bar.style.display =
-      'flex';
-
-    positionBar();
   }
 
   function positionUI() {
-    if (!ui) return;
-
-    if (
-      ui.active &&
-      ui.hover.style.display !==
-        'none'
-    ) {
-      positionHover();
-    }
-
-    if (ui.title) {
-      positionBar();
-    }
-  }
-
-  function positionBar() {
-    if (
-      !ui?.title?.isConnected
-    ) {
-      return;
-    }
-
-    const titleRect =
-      ui.title
-        .getBoundingClientRect();
-
-    const rows = [
-      ...document.querySelectorAll(
-        [
-          '.video-info-detail-list',
-          '.video-info-detail',
-          '.video-data'
-        ].join(',')
-      )
-    ];
-
-    const row =
-      rows.find(element => {
-        const rect =
-          element.getBoundingClientRect();
-
-        return (
-          rect.width > 40 &&
-          rect.top >=
-            titleRect.top &&
-          rect.top <=
-            titleRect.bottom + 100
-        );
-      });
-
-    if (
-      !row ||
-      titleRect.bottom < 58
-    ) {
-      ui.bar.style.display =
-        'none';
-
-      return;
-    }
-
-    ui.bar.style.display =
-      'flex';
-
-    const rowRect =
-      row.getBoundingClientRect();
-
-    const datePattern =
-      /\d{4}\s*[-/.]\s*\d{1,2}\s*[-/.]\s*\d{1,2}/;
-
-    const dateElements = [
-      ...row.querySelectorAll('*')
-    ]
-      .filter(element => {
-        const text =
-          clean(
-            element.textContent
-          );
-
-        if (
-          !datePattern.test(text)
-        ) {
-          return false;
-        }
-
-        const rect =
-          element.getBoundingClientRect();
-
-        if (
-          rect.width <= 1 ||
-          rect.height <= 1
-        ) {
-          return false;
-        }
-
-        return ![
-          ...element.children
-        ].some(child =>
-          datePattern.test(
-            clean(
-              child.textContent
-            )
-          )
-        );
-      })
-      .sort((a, b) => {
-        const aRect =
-          a.getBoundingClientRect();
-
-        const bRect =
-          b.getBoundingClientRect();
-
-        return (
-          aRect.width *
-            aRect.height -
-          bRect.width *
-            bRect.height
-        );
-      });
-
-    const dateElement =
-      row.querySelector(
-        [
-          '.pubdate-ip-text',
-          '.pubdate-text',
-          '.pubdate-ip',
-          '[class*="pubdate"]'
-        ].join(',')
-      ) ||
-      dateElements[0];
-
-    const anchorRect =
-      dateElement
-        ?.getBoundingClientRect() ||
-      rowRect;
-
-    const width =
-      ui.bar.offsetWidth ||
-      275;
-
-    const height =
-      ui.bar.offsetHeight ||
-      32;
-
-    ui.bar.style.left =
-      `${
-        Math.max(
-          12,
-          Math.min(
-            innerWidth -
-              width -
-              12,
-            anchorRect.right +
-              18
-          )
-        )
-      }px`;
-
-    ui.bar.style.top =
-      `${
-        Math.max(
-          62,
-          anchorRect.top +
-          (
-            anchorRect.height -
-            height
-          ) / 2
-        )
-      }px`;
-  }
-
-  function buttonTip(
-    button,
-    message
-  ) {
-    const tip = ui.tip;
-
-    const rect =
-      button.getBoundingClientRect();
-
-    tip.textContent =
-      message;
-
-    tip.style.display =
-      'block';
-
-    tip.classList.remove(
-      'show'
-    );
-
-    requestAnimationFrame(
-      () => {
-        const width =
-          tip.offsetWidth;
-
-        tip.style.left =
-          `${
-            Math.max(
-              10,
-              Math.min(
-                innerWidth -
-                  width -
-                  10,
-                rect.left +
-                rect.width / 2 -
-                width / 2
-              )
-            )
-          }px`;
-
-        tip.style.top =
-          `${
-            Math.max(
-              10,
-              rect.top -
-              tip.offsetHeight -
-              7
-            )
-          }px`;
-
-        tip.classList.add(
-          'show'
-        );
-      }
-    );
-
-    clearTimeout(
-      ui.tipTimer
-    );
-
-    ui.tipTimer =
-      setTimeout(() => {
-        tip.classList.remove(
-          'show'
-        );
-
-        setTimeout(() => {
-          tip.style.display =
-            'none';
-        }, 200);
-      }, 1100);
+    if (ui?.active && ui.hoverActions.style.display !== 'none') positionHover();
   }
 
   /* ==================== BV与标题 ==================== */
@@ -4373,4 +4112,41 @@
       }
     );
   }
+  function startBiliClip() {
+    const failed = new Set();
+    const sync = (...features) => {
+      for (const update of features) {
+        try {
+          update();
+          failed.delete(update);
+        } catch (error) {
+          if (!failed.has(update)) console.warn('BiliClip:', update.name, error);
+          failed.add(update);
+        }
+      }
+    };
+
+    if (isMember) {
+      const updateCreatorPage = () => sync(
+        syncUploadPanel, syncVideoPicker, syncTagPreset, syncCreatorPanelContext, startTutorialOnce
+      );
+      updateCreatorPage();
+      setInterval(() => {
+        updateCreatorPage();
+        if (panelExecuting || declarationPending) return;
+        if (!declarationBusy && autoKnowledge) applyKnowledge(true);
+        if (!knowledgeBusy && declarationPrefs.auto) applyDeclaration(true);
+      }, 1200);
+      return;
+    }
+
+    if (isBili && location.pathname !== '/web/player/index.html') {
+      const updateVideoPage = () => sync(createBiliUI, startTutorialOnce);
+      updateVideoPage();
+      setInterval(updateVideoPage, 1500);
+    }
+  }
+
+  // ready() may run immediately when the userscript is injected into a loaded tab.
+  ready(startBiliClip);
 })();

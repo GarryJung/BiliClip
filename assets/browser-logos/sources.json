@@ -1,0 +1,50 @@
+{
+  "checked_on": "2026-11-23",
+  "chrome": {
+    "page": "https://www.google.com/chrome/",
+    "asset": "https://www.google.com/chrome/static/images/chrome-logo-m100.svg"
+  },
+  "firefox": {
+    "page": "https://www.firefox.com/",
+    "asset": "https://www.firefox.com/media/img/favicons/firefox/browser/favicon-196x196.59e3822720be.png"
+  },
+  "edge": {
+    "page": "https://explore.microsoft.com/en-us/edge/download?form=MA13FJ",
+    "asset": "https://edgecdn-embza6g8cacagcbn.z01.azurefd.net/welcome/static/favicon.png"
+  },
+  "360": {
+    "page": "https://browser.360.cn/",
+    "asset": "https://p4.ssl.qhimg.com/t110b9a93016f838be146a5b14d.png"
+  },
+  "dia": {
+    "page": "https://www.diabrowser.com/",
+    "asset": "dia.png",
+    "source": "/Applications/Dia.app/Contents/Resources/AppIcon.icns",
+    "type": "Official application bundle icon, converted to 128px PNG",
+    "app_version": "1.56.2",
+    "sha256": "eedc9285e4d90568a6363d02c943727948e80e2c783fcfebf00cceddb387ea5b"
+  },
+  "comet": {
+    "page": "https://www.perplexity.ai/comet",
+    "asset": "comet.png",
+    "source": "/Applications/Comet.app/Contents/Resources/app.icns",
+    "type": "Official application bundle icon, converted to 128px PNG",
+    "app_version": "157.0.8103.366",
+    "sha256": "077ae70e4031e3548b1294a07f57678766426ba349352457af6982b1fed9dddd"
+  },
+  "cent": {
+    "page": "https://centbrowser.com/",
+    "asset": "cent.png",
+    "source": "https://centbrowser.com/image/logo.png",
+    "type": "Official header wordmark; square icon at left displayed using object-fit:cover and object-position:left",
+    "sha256": "48b8591e76f60f874ae4fd9ffd115d76cb351d9ca5e47b7bbea9bb3d2898e81a"
+  },
+  "safari": {
+    "page": "https://www.apple.com/safari/",
+    "asset": "safari.png",
+    "source": "/Applications/Safari.app/Contents/Resources/AppIcon.icns",
+    "type": "Official application bundle icon, converted to 128px PNG",
+    "app_version": "26.2",
+    "sha256": "d6bac540056f7638cd4941b0e7ad82785425087db938e46a4509a9b06eedcdc2"
+  }
+}
