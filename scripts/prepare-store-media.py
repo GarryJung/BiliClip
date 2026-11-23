@@ -1,7 +1,7 @@
 """Render current bundled UI with local sample data; no real account data."""
 from pathlib import Path
 import subprocess,json,base64
-r=Path(__file__).resolve().parents[1];out=r/'release/8.2.0/media';out.mkdir(parents=True,exist_ok=True)
+r=Path(__file__).resolve().parents[1];out=r/'release/8.2.1/media';out.mkdir(parents=True,exist_ok=True)
 source=(r/'biliclip.user.js').read_text()
 chrome='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 def shot(html,path,w,h):
@@ -32,3 +32,12 @@ for n in [48,96,128,300]:
 for w,h,name in [(440,280,'tile-440x280.png'),(1400,560,'tile-1400x560.png')]:
  shot(f'<html lang="zh-CN"><meta charset="utf-8"><style>body{{margin:0;display:grid;place-content:center;text-align:center;height:100vh;background:#f6f7f8;font-family:system-ui;color:#18191c}}img{{width:{w//6}px;margin:auto}}h1{{font-size:{w//16}px;margin:12px}}p{{font-size:{max(15,w//48)}px;margin:4px;color:#61666d}}</style><img src="{(r/"assets/biliclip-logo.png").as_uri()}"><h1>喵贴 BiliClip</h1><p>B站投稿助手</p><p>标题填入 · 简介多选 · 标签预设 · 视频关联</p></html>',out/name,w,h)
 print('Rendered current UI store media')
+
+# Actual usage scenes supplied by the author, fitted without distorting proportions.
+for index,key,title in [(3,'upload','投稿设置，一处备好'),(4,'description','常用简介，按需填入'),(5,'library','关联视频，分别填好'),(6,'copy','跟着引导，顺手复制')]:
+ image=(r/f'assets/screenshots/real-{key}.jpg').as_uri()
+ html=f'<html lang="zh-CN"><meta charset="utf-8"><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f8fb;color:#172b3a;font-family:system-ui}}header{{padding:26px 40px}}h1{{font-size:30px;margin:0 0 4px}}p{{margin:0;color:#5d6d7b;font-size:14px}}figure{{margin:0 32px;background:white;border:1px solid #dfe7ed;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;height:600px}}img{{max-width:100%;max-height:100%;object-fit:contain}}footer{{padding:12px 40px;font-size:12px;color:#5d6d7b}}</style><header><h1>喵贴 BiliClip · {title}</h1><p>真实使用场景 · B 站网页版投稿助手</p></header><figure><img src="{image}"></figure><footer>实际场景截图，界面细节以 8.2.1 为准 · 独立项目，非哔哩哔哩官方产品</footer></html>'
+ src=out/f'{index:02d}-real-{key}-1280x800.png'
+ shot(html,src,1280,800)
+ subprocess.run(['sips','-z','350','560',str(src),'--out',str(out/f'{index:02d}-real-{key}-560x350.png')],stdout=subprocess.DEVNULL,check=True)
+print('Rendered four actual usage scenes')

@@ -18,3 +18,8 @@ api.runtime.onMessage.addListener((message, sender, reply) => {
     .finally(() => clearTimeout(timer));
   return true;
 });
+
+// Open the hosted welcome page only for a fresh installation.
+api.runtime.onInstalled.addListener(details => {
+  if (details.reason === 'install') api.tabs.create({url:'https://bv.lcat.cc/welcome.html'});
+});

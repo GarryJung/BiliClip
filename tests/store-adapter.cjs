@@ -1,7 +1,7 @@
 const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
 (async()=>{
  let handler, calls=0;
- const ctx={chrome:{runtime:{id:'self',onMessage:{addListener:fn=>handler=fn}}},URL,AbortController,setTimeout,clearTimeout,fetch:async()=>{calls++;return {status:200,text:async()=>'{"code":0}'}}};
+ const ctx={chrome:{runtime:{id:'self',onInstalled:{addListener:()=>{}},onMessage:{addListener:fn=>handler=fn}}},URL,AbortController,setTimeout,clearTimeout,fetch:async()=>{calls++;return {status:200,text:async()=>'{"code":0}'}}};
  vm.runInNewContext(fs.readFileSync('extension/background.js','utf8'),ctx);
  const send=async(url,sender)=>{let value;const pending=handler({type:'biliclip-api',url},sender,v=>value=v);if(pending)await new Promise(r=>setImmediate(r));return value};
  const good={id:'self',url:'https://member.bilibili.com/platform/upload/video/frame'};
