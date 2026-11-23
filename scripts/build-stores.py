@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 OUT=ROOT/'release/8.2.1'
 OUT.mkdir(parents=True,exist_ok=True)
-manifest=dict(manifest_version=3,name='喵贴 BiliClip - B站投稿助手',version='8.2.1',description='标题填入、简介多选预设、标签预设与关联视频填充，让 B 站投稿少一点重复。',homepage_url='https://bv.lcat.cc/',permissions=['storage','clipboardWrite'],host_permissions=['https://api.bilibili.com/*'],icons={str(n):f'icons/{n}.png' for n in (16,32,48,96,128)},action={'default_popup':'popup.html','default_title':'喵贴 BiliClip'},content_scripts=[dict(matches=['http://*/*','https://*/*'],js=['content.js'],run_at='document_start',all_frames=True)])
+manifest=dict(manifest_version=3,name='喵贴 BiliClip - B站投稿助手',version='8.2.1',description='标题填入、简介多选预设、标签预设与关联视频填充，让 B 站投稿少一点重复。',homepage_url='https://bv.lcat.cc/',permissions=['storage','clipboardWrite'],host_permissions=['https://api.bilibili.com/*'],icons={str(n):f'icons/{n}.png' for n in (16,32,48,96,128)},action={'default_popup':'popup.html','default_title':'喵贴 BiliClip'},content_scripts=[dict(matches=['https://*.bilibili.com/*'],js=['content.js'],run_at='document_start',all_frames=True)])
 identities=json.loads((ROOT/'extension/store-identities.json').read_text())
 firefox_id=os.environ.get('BILICLIP_FIREFOX_ID') or identities['firefox']['id']
 script=(ROOT/'biliclip.user.js').read_text()
@@ -40,7 +40,7 @@ for channel in ([args.channel] if args.channel else ['chrome','edge','firefox','
                 z.writestr(info,p.read_bytes())
     print(target.name)
 with zipfile.ZipFile(OUT/'biliclip-8.2.1-source.zip','w',zipfile.ZIP_DEFLATED) as z:
-    for p in [ROOT/'biliclip.user.js',*sorted((ROOT/'extension').glob('*')),ROOT/'scripts/build-stores.py',ROOT/'scripts/prepare-store-media.py',ROOT/'scripts/organize-store-release.py',ROOT/'tests/store-adapter.cjs',ROOT/'tests/popup-menu.cjs',ROOT/'tests/8.2.1-description.cjs',ROOT/'tests/8.2.1-chrome-install.cjs',ROOT/'tests/8.2.1-tag-keyboard.cjs',ROOT/'assets/biliclip-logo.png']:
+    for p in [ROOT/'biliclip.user.js',*sorted((ROOT/'extension').glob('*')),ROOT/'scripts/build-stores.py',ROOT/'scripts/prepare-store-media.py',ROOT/'scripts/organize-store-release.py',ROOT/'tests/store-adapter.cjs',ROOT/'tests/store-permissions.cjs',ROOT/'tests/popup-menu.cjs',ROOT/'tests/8.2.1-description.cjs',ROOT/'tests/8.2.1-chrome-install.cjs',ROOT/'tests/8.2.1-tag-keyboard.cjs',ROOT/'assets/biliclip-logo.png']:
         z.write(p,p.relative_to(ROOT))
 (OUT/'源文件SHA256.txt').write_text(hashlib.sha256((ROOT/'biliclip.user.js').read_bytes()).hexdigest()+'  biliclip.user.js\n')
 (OUT/'SHA256SUMS.txt').write_text(''.join(f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n' for p in sorted(OUT.glob('*.zip'))))

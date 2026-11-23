@@ -4,8 +4,7 @@
 // @version      8.2.1
 // @description  标题填入、简介多选预设、标签预设与关联视频填充，让 B 站投稿少一点重复。
 // @author       Garry Jung
-// @match        http://*/*
-// @match        https://*/*
+// @match        https://*.bilibili.com/*
 // @run-at       document-start
 // @grant        GM_registerMenuCommand
 // @grant        GM_setClipboard
@@ -99,6 +98,8 @@
 
   const isMember =
     /(^|\.)member\.bilibili\.com$/i.test(location.hostname);
+
+  if (!isBili) return;
 
   let ui = null;
   let creatorFields = null;
@@ -305,7 +306,7 @@
     const library = document.getElementById('biliclip-video-picker');
     const workbench = document.getElementById('biliclip-upload-panel');
     const host = library || workbench;
-    return host?.shadowRoot?.querySelector(library ? '.resize-se' : 'header');
+    return host?.shadowRoot?.querySelector(library ? '.resize-sw' : 'header');
   }
 
   function tutorialSteps(scene = 'copy') {
@@ -317,7 +318,7 @@
       const host=document.getElementById('biliclip-upload-panel');
       const expand=host?.hasAttribute('data-collapsed') ? [step('展开工作台','点击这个标签，展开投稿设置。',panel('.tab'),'click')] : [];
       return [...expand,
-        step('放大或缩小面板','按住面板任意边缘或四角拖动，即可放大或缩小；按住顶部标题栏可移动面板。尺寸和位置会自动记住。',panel('.resize-se')),
+        step('放大或缩小面板','按住面板任意边缘或四角拖动，即可放大或缩小；按住顶部标题栏可移动面板。尺寸和位置会自动记住。',panel('.resize-sw')),
         step('选择简介预设','展开下拉框选择预设，可多选或不选。执行时每条预设追加到简介末尾的新一行。',panel('.description-dropdown summary'),'choice'),
         step('选择第二行处理方式','勾选「复写第二行」会用所选预设替换第二行，多条预设依次插入，保留后续正文；不勾选则追加到简介末尾。不选预设时不改动第二行。',panel('#overwrite-second-line')),
         step('应用投稿设置','点击「一键执行」，把选中的设置应用到当前稿件。',panel('#execute'),'execute'),
@@ -346,7 +347,7 @@
       ...(document.getElementById('biliclip-video-picker')?.hasAttribute('data-collapsed')
         ? [step('展开关联视频库','点击这个按钮，展开关联视频库。',library('.tab'),'click')]
         : []),
-      step('放大或缩小视频库','按住面板边缘或四角拖动，调整到适合当前窗口的大小；按住标题栏可移动面板。',library('.resize-se')),
+      step('放大或缩小视频库','按住面板边缘或四角拖动，调整到适合当前窗口的大小；按住标题栏可移动面板。',library('.resize-sw')),
       step('打开我的视频','点击「我的视频」，查看可以关联的稿件。',library('#videos'),'click'),
       {
         ...step('填入关联视频','点击高亮的「填入」，把 BV 和标题分别填到链接和描述文案。',library('#list .actions button[title="填入 BV + 标题"]'),'fill'),
@@ -648,6 +649,15 @@
       hasLayout = true;
     };
     const close=()=>{clearTimeout(finishTimer);cancelFollow();motionPreference.removeEventListener?.('change',onMotionChange);if(scene==='copy')releaseHomeGuideCover();if(frame)window.cancelAnimationFrame?.(frame);disposed=true;clearInterval(timer);for(const name of ['click','change','input'])document.removeEventListener(name,observe,true);document.removeEventListener('keydown',escape,true);host.remove();if(previous?.isConnected)previous.focus();};
+    const completeScene=()=>{
+      close();
+      if(scene==='workbench') {
+        // Continue promptly after completing the tag preset steps, without waiting
+        // for the upload page's periodic scan. A second check covers unfolding controls.
+        setTimeout(startTutorialOnce,160);
+        setTimeout(startTutorialOnce,450);
+      }
+    };
     const finish=()=>{
       if(scene!=='library' || steps[index].action!=='fill' || !completed){close();return;}
       if(host.hasAttribute('data-finishing'))return;
@@ -667,7 +677,7 @@
       Object.assign(card.style,{left:Math.max(12,(innerWidth-card.offsetWidth)/2)+'px',top:Math.max(12,(innerHeight-card.offsetHeight)/2)+'px'});card.setAttribute('data-side','none');
       finishTimer=setTimeout(close,1800);
     };
-    const advance=()=>{if(scene==='library' && steps[index].action==='fill' && completed){finish();return;}if(index===steps.length-1){close();}else{index++;render();}};
+    const advance=()=>{if(scene==='library' && steps[index].action==='fill' && completed){finish();return;}if(index===steps.length-1){completeScene();}else{index++;render();}};
     const observe=event=>{
       if(host.hasAttribute('data-finishing'))return;
       const action = steps[index].action;
@@ -675,7 +685,7 @@
       if (event.type === 'click' && action === 'read' && index === steps.length - 1 &&
           !['#close', '#skip', '#prev', '#next'].some(selector => path.includes(get(selector)))) {
         // Preserve native navigation when closing an informational step.
-        close();
+        completeScene();
         return;
       }
       const t=target();if(!t||!path.includes(t)||path.includes(host))return;
@@ -1686,7 +1696,7 @@
         button:focus-visible,input:focus-visible{outline:2px solid #b82d58;outline-offset:2px}
         p{margin:6px 0 0;color:#61666d;font-size:12px}[role=status]:empty{display:none}
         @media(max-width:600px){.entry{gap:4px}.entry label{font-size:12px}button{padding:3px 5px}}
-      </style><section class="preset"><span class="label" id="description-label">${PANEL_LOGO}喵贴·简介预设</span><div role="group" aria-labelledby="description-label"><div id="entries"></div><button id="add" type="button">＋ 增加一条预设</button><p>最多 10 条，每条预设追加到简介末尾的新一行。</p><p role="status" id="status"></p></div></section>`;
+      </style><section class="preset"><span class="label" id="description-label" style="color:#18191c">${PANEL_LOGO}喵贴·简介预设</span><div role="group" aria-labelledby="description-label"><div id="entries"></div><button id="add" type="button">＋ 增加一条预设</button><p>最多 10 条，每条预设追加到简介末尾的新一行。</p><p role="status" id="status"></p></div></section>`;
       const render = () => {
         root.querySelector('#entries').replaceChildren();
         uploadPrefs.presets.forEach((text, index) => {
@@ -1865,7 +1875,18 @@
         });
       };
       input.addEventListener('keydown', event => {
-        if (event.key !== 'Enter' || event.isComposing || event.keyCode === 229) return;
+        if (event.isComposing || event.keyCode === 229) return;
+        if ((event.key === 'Backspace' || event.key === 'Delete') && input.value === '' && tags.length) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (event.repeat) return;
+          const removed = tags.pop();
+          persist();
+          renderTags();
+          status.textContent = `已删除标签 ${removed}`;
+          return;
+        }
+        if (event.key !== 'Enter') return;
         event.preventDefault();
         event.stopPropagation();
         const tag = input.value.trim();
@@ -2423,7 +2444,7 @@
       .resize-n,.resize-s{left:8px;right:8px;height:8px;cursor:ns-resize}.resize-n{top:-4px}.resize-s{bottom:-4px}
       .resize-e,.resize-w{top:8px;bottom:8px;width:8px;cursor:ew-resize}.resize-e{right:-4px}.resize-w{left:-4px}
       .resize-ne,.resize-nw,.resize-se,.resize-sw{width:14px;height:14px}
-      .resize-ne{top:-4px;right:-4px;cursor:nesw-resize}.resize-sw{bottom:-4px;left:-4px;cursor:nesw-resize}
+      .resize-sw:after{content:"";position:absolute;left:4px;bottom:4px;width:8px;height:8px;border-left:2px solid #00aeec;border-bottom:2px solid #00aeec;border-radius:0 0 0 3px}.resize-ne{top:-4px;right:-4px;cursor:nesw-resize}.resize-sw{bottom:-4px;left:-4px;cursor:nesw-resize}
       .resize-nw{top:-4px;left:-4px;cursor:nwse-resize}.resize-se{bottom:-4px;right:-4px;cursor:nwse-resize}
       #list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));align-content:start;gap:0 14px}
       .item{grid-template-columns:64px minmax(0,1fr) auto;grid-template-rows:auto auto auto;align-content:start;gap:3px 8px;padding:10px 0}
@@ -3137,7 +3158,7 @@
       </style>
       <button class="tab" type="button">${PANEL_LOGO}喵贴助手</button>
       <style>
-        .overwrite-option{position:relative;display:flex;align-items:center;gap:8px;margin-top:8px}.info-tip{border:1px solid #9499a0;border-radius:50%;padding:0;width:22px;height:22px;background:white;color:#61666d;font:italic 600 13px Georgia;cursor:help}.overwrite-option [role=tooltip]{display:none;position:absolute;bottom:100%;right:0;width:220px;max-width:calc(100vw - 48px);padding:10px;border:1px solid #ccd0d7;border-radius:8px;background:#fff;color:#414852;box-shadow:0 4px 14px #18191c26;font-size:12px;line-height:1.65;z-index:40}.info-tip:hover+span,.info-tip:focus+span{display:block}
+        .overwrite-option{position:relative;display:flex;align-items:center;gap:8px;margin-top:8px}.overwrite-option .info-tip{box-sizing:border-box;display:inline-grid;place-items:center;flex:0 0 16px;min-width:16px;min-height:16px;max-width:16px;max-height:16px;line-height:1;border:1px solid #9499a0;border-radius:50%;padding:0;width:16px;height:16px;background:white;color:#61666d;font:italic 600 11px/1 Georgia;cursor:help}.overwrite-option [role=tooltip]{display:none;position:absolute;bottom:100%;right:0;width:220px;max-width:calc(100vw - 48px);padding:10px;border:1px solid #ccd0d7;border-radius:8px;background:#fff;color:#414852;box-shadow:0 4px 14px #18191c26;font-size:12px;line-height:1.65;z-index:40}.info-tip:hover+span,.info-tip:focus+span{display:block}
         .description-dropdown{position:relative;width:100%;font-size:13px}
         .description-dropdown summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid #ccd0d7;border-radius:6px;background:white;cursor:pointer;min-height:34px}
         .description-dropdown summary::-webkit-details-marker{display:none}

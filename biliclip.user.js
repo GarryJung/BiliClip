@@ -4,8 +4,7 @@
 // @version      8.2.1
 // @description  标题填入、简介多选预设、标签预设与关联视频填充，让 B 站投稿少一点重复。
 // @author       Garry Jung
-// @match        http://*/*
-// @match        https://*/*
+// @match        https://*.bilibili.com/*
 // @run-at       document-start
 // @grant        GM_registerMenuCommand
 // @grant        GM_setClipboard
@@ -99,6 +98,8 @@
 
   const isMember =
     /(^|\.)member\.bilibili\.com$/i.test(location.hostname);
+
+  if (!isBili) return;
 
   let ui = null;
   let creatorFields = null;
