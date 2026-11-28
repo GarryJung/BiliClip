@@ -46,5 +46,13 @@
     "type": "Official application bundle icon, converted to 128px PNG",
     "app_version": "26.2",
     "sha256": "d6bac540056f7638cd4941b0e7ad82785425087db938e46a4509a9b06eedcdc2"
+  },
+  "arc": {
+    "asset": "https://upload.wikimedia.org/wikipedia/commons/3/37/Arc_%28browser%29_logo.svg",
+    "page": "https://commons.wikimedia.org/wiki/File:Arc_(browser)_logo.svg"
+  },
+  "2345": {
+    "asset": "https://ie.2345.cc/favicon.ico",
+    "page": "https://ie.2345.cc/"
   }
 }
